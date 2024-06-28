@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Display};
 
-use kube_core::{GroupVersionKind, Resource};
+use kube::core::{GroupVersionKind, Resource};
 use regex::Regex;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -125,6 +125,15 @@ impl<R: ResourceThreadSafe> Filter<R> for FilterList {
 #[serde(try_from = "String")]
 pub struct FilterRegex(pub Regex);
 
+impl Serialize for FilterRegex {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.0.as_str())
+    }
+}
+
 impl Default for FilterRegex {
     fn default() -> Self {
         Self(Regex::new("").unwrap())
@@ -155,7 +164,7 @@ impl TryFrom<String> for FilterRegex {
 mod tests {
 
     use k8s_openapi::api::core::v1::Pod;
-    use kube_core::{ApiResource, DynamicObject, TypeMeta};
+    use kube::core::{ApiResource, DynamicObject, TypeMeta};
 
     use crate::filters::namespace::{NamespaceExclude, NamespaceInclude};
 

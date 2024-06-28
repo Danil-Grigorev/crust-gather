@@ -4,12 +4,12 @@ use std::{
 };
 
 use anyhow::bail;
-use kube_core::{Resource, TypeMeta};
-use serde::Deserialize;
+use kube::core::{Resource, TypeMeta};
+use serde::{Deserialize, Serialize};
 
 use crate::scanners::interface::ResourceThreadSafe;
 
-#[derive(Default, Clone, Deserialize, Debug)]
+#[derive(Default, Clone, Deserialize, Serialize, Debug)]
 pub struct NamespaceName {
     pub name: Option<String>,
     pub namespace: Option<String>,
@@ -247,7 +247,7 @@ impl Representation {
 mod tests {
 
     use k8s_openapi::api::core::v1::{Node, Pod};
-    use kube_core::{ObjectMeta, Resource};
+    use kube::core::{ObjectMeta, Resource};
 
     use super::*;
 

@@ -186,7 +186,7 @@ fn temp_kubeconfig(cluster: &str) -> PathBuf {
 mod test {
     use k8s_openapi::api::core::v1::Pod;
     use kube::Api;
-    use kube_core::{params::ListParams, ApiResource, DynamicObject};
+    use kube::core::{params::ListParams, ApiResource, DynamicObject};
     use serial_test::serial;
 
     use crate::tests::kwok;

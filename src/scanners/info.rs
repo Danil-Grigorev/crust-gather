@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use http::Request;
 use k8s_openapi::api::core::v1::Node;
 use kube::Api;
-use kube_core::{ApiResource, TypeMeta};
+use kube::core::{ApiResource, TypeMeta};
 
 use crate::gather::{
     config::{Config, Secrets},

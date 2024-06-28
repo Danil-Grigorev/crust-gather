@@ -8,7 +8,7 @@ use crate::{
 use async_trait::async_trait;
 
 use kube::Api;
-use kube_core::{ApiResource, GroupVersionKind, Resource, TypeMeta};
+use kube::core::{ApiResource, GroupVersionKind, Resource, TypeMeta};
 
 use std::{
     fmt::Debug,
@@ -106,7 +106,7 @@ mod test {
         serde_json,
     };
     use kube::Api;
-    use kube_core::{params::PostParams, ApiResource, DynamicObject};
+    use kube::core::{params::PostParams, ApiResource, DynamicObject};
     use serial_test::serial;
     use tokio_retry::strategy::FixedInterval;
     use tokio_retry::Retry;

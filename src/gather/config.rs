@@ -13,10 +13,10 @@ use k8s_openapi::api::core::v1::{ConfigMap, Event, Node, Pod, Secret};
 use kube::api::ListParams;
 use kube::config::{KubeConfigOptions, Kubeconfig};
 use kube::{discovery, Api, Client, ResourceExt};
-use kube_core::discovery::verbs::LIST;
-use kube_core::ApiResource;
+use kube::core::discovery::verbs::LIST;
+use kube::core::ApiResource;
 use serde::de::DeserializeOwned;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tokio::time::timeout;
 
 use crate::filters::filter::FilterGroup;
@@ -34,7 +34,7 @@ use super::writer::Writer;
 #[derive(Default, Clone, Debug)]
 pub struct Secrets(pub Vec<String>);
 
-#[derive(Default, Clone, Deserialize)]
+#[derive(Default, Clone, Deserialize, Serialize, Debug)]
 pub struct SecretsFile(pub PathBuf);
 
 impl Secrets {
@@ -121,7 +121,7 @@ impl From<String> for ConfigFromConfigMap {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Serialize, Debug)]
 /// `KubeconfigFile` wraps a Kubeconfig struct used to instantiate a Kubernetes client.
 pub struct KubeconfigFile(pub Kubeconfig);
 
@@ -196,7 +196,7 @@ impl From<&KubeconfigFile> for Kubeconfig {
     }
 }
 
-#[derive(Default, Clone, Deserialize, Debug)]
+#[derive(Default, Clone, Deserialize, Serialize, Debug)]
 /// `KubeconfigSecretLabel` wraps a Kubeconfig secret label used to search a secret to instantiate a Kubernetes client.
 pub struct KubeconfigSecretLabel(pub String);
 
@@ -221,7 +221,7 @@ impl From<String> for KubeconfigSecretLabel {
     }
 }
 
-#[derive(Default, Clone, Deserialize, Debug)]
+#[derive(Default, Clone, Deserialize, Serialize, Debug)]
 /// `KubeconfigSecretNamespaceName` wraps a Kubeconfig secret namespace/name used to instantiate a Kubernetes client.
 pub struct KubeconfigSecretNamespaceName(pub NamespaceName);
 
@@ -285,7 +285,7 @@ impl SecretSearch {
     }
 }
 
-#[derive(Clone, Deserialize, Copy)]
+#[derive(Clone, Deserialize, Serialize, Copy, Debug)]
 pub struct RunDuration(DurationString);
 
 impl TryFrom<String> for RunDuration {

@@ -4,10 +4,9 @@ use anyhow::bail;
 use k8s_openapi::{
     apiextensions_apiserver::pkg::apis::apiextensions::v1::{
         CustomResourceColumnDefinition, CustomResourceDefinition, CustomResourceDefinitionVersion,
-    },
-    serde_json::{self, json},
+    }, apimachinery::pkg::apis::meta::v1::LabelSelector, serde_json::{self, json}
 };
-use kube_core::{PartialObjectMeta, Resource, TypeMeta};
+use kube::core::{PartialObjectMeta, Resource, TypeMeta};
 use serde::{Deserialize, Serialize};
 use serde_json_path::JsonPath;
 
@@ -77,6 +76,12 @@ impl Get {
 pub struct Log {
     container: Container,
     previous: Option<bool>,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct Selector {
+    #[serde(rename = "labelSelector")]
+    label_selector: String,
 }
 
 #[derive(Deserialize, Clone)]

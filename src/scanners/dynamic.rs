@@ -5,7 +5,7 @@ use std::{
 
 use async_trait::async_trait;
 use kube::Api;
-use kube_core::{ApiResource, DynamicObject, ResourceExt, TypeMeta};
+use kube::core::{ApiResource, DynamicObject, ResourceExt, TypeMeta};
 
 use crate::gather::{
     config::{Config, Secrets},
@@ -78,7 +78,7 @@ mod test {
 
     use k8s_openapi::{api::core::v1::Pod, serde_json};
     use kube::Api;
-    use kube_core::{params::PostParams, ApiResource};
+    use kube::core::{params::PostParams, ApiResource};
     use serde::Deserialize;
     use serial_test::serial;
     use tempdir::TempDir;

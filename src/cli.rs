@@ -4,6 +4,7 @@ use anyhow::anyhow;
 use clap::{arg, command, ArgAction, Parser, Subcommand};
 use k8s_openapi::serde::Deserialize;
 use kube::{config::Kubeconfig, Client};
+use serde::Serialize;
 
 use crate::{
     filters::{
@@ -158,7 +159,8 @@ impl ConfigSource {
     }
 }
 
-#[derive(Parser, Clone, Default, Deserialize)]
+/// This provides a config for fleet addon functionality
+#[derive(Parser, Clone, Default, Deserialize, Serialize, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct GatherCommands {
     #[serde(default)]
@@ -205,7 +207,7 @@ impl GatherSettings {
     }
 }
 
-#[derive(Parser, Clone, Default, Deserialize)]
+#[derive(Parser, Clone, Default, Deserialize, Serialize, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct GatherSettings {
     /// Path to a kubeconfig file.
@@ -325,7 +327,7 @@ impl GatherSettings {
     }
 }
 
-#[derive(Parser, Clone, Deserialize, Debug)]
+#[derive(Parser, Clone, Deserialize, Serialize, Debug)]
 #[group(required = false, multiple = false)]
 #[serde(deny_unknown_fields)]
 pub struct KubeconfigFromSecret {
@@ -362,7 +364,7 @@ impl KubeconfigFromSecret {
     }
 }
 
-#[derive(Parser, Clone, Default, Deserialize)]
+#[derive(Parser, Clone, Default, Deserialize, Serialize, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct Filters {
     /// Namespace to include in the resource collection.
@@ -534,7 +536,7 @@ mod tests {
 
     use k8s_openapi::api::core::v1::{ConfigMap, Namespace, Secret};
     use kube::{api::PostParams, Api};
-    use kube_core::{params::ListParams, ObjectMeta};
+    use kube::core::{params::ListParams, ObjectMeta};
     use serial_test::serial;
     use tempdir::TempDir;
     use tokio::fs;

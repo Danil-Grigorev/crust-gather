@@ -10,7 +10,7 @@ use k8s_openapi::api::core::v1::{
     Container, HostPathVolumeSource, Node, Pod, PodSpec, Toleration, Volume, VolumeMount,
 };
 use kube::Api;
-use kube_core::{
+use kube::core::{
     params::{DeleteParams, WatchParams},
     subresource::AttachParams,
     ApiResource, ErrorResponse, ObjectMeta, ResourceExt, TypeMeta, WatchEvent,

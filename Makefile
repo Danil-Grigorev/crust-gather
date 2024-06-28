@@ -11,3 +11,7 @@ export PATH := $(abspath $(TOOLS_BIN_DIR)):$(PATH)
 test: $(TOOLS_BIN_DIR)
 	./scripts/install-kwok.sh $(TOOLS_BIN_DIR)
 	cargo t --features archive
+
+.PHONY: generate-addon-crds
+generate-addon-crds:
+	cargo run --bin crdgen > config/crds/crust-gather.yaml

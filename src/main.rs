@@ -2,6 +2,7 @@ mod cli;
 mod filters;
 mod gather;
 mod scanners;
+mod crdgen;
 
 #[cfg(test)]
 mod tests;

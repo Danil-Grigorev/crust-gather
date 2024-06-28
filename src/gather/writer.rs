@@ -1,7 +1,7 @@
 #[cfg(feature = "archive")]
 use flate2::{write::GzEncoder, Compression};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     ffi::OsStr,
     fmt::Display,
@@ -64,7 +64,7 @@ impl From<ArchiveSearch> for Vec<Archive> {
     }
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct Archive(PathBuf);
 
 /// Creates a new Archive instance with the given path.
@@ -128,7 +128,7 @@ impl From<&str> for Archive {
     }
 }
 
-#[derive(Clone, Default, Deserialize)]
+#[derive(Clone, Default, Deserialize, Serialize, Debug)]
 /// The Encoding enum represents the supported archive encoding formats.
 /// - Path indicates no encoding.
 /// - Gzip indicates gzip compression should be used.

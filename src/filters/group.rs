@@ -1,13 +1,13 @@
 use std::fmt::Display;
 
-use kube_core::GroupVersionKind;
-use serde::Deserialize;
+use kube::core::GroupVersionKind;
+use serde::{Deserialize, Serialize};
 
 use crate::scanners::interface::ResourceThreadSafe;
 
 use super::filter::{Filter, FilterDefinition, FilterRegex, FilterType};
 
-#[derive(Clone, Default, Deserialize, Debug)]
+#[derive(Clone, Default, Deserialize, Serialize, Debug)]
 #[serde(try_from = "String")]
 pub struct Group {
     group: FilterRegex,
@@ -20,7 +20,7 @@ impl Group {
     }
 }
 
-#[derive(Clone, Default, Deserialize, Debug)]
+#[derive(Clone, Default, Deserialize, Serialize, Debug)]
 #[serde(try_from = "String")]
 pub struct GroupInclude {
     group: Group,
@@ -89,7 +89,7 @@ impl From<Vec<GroupInclude>> for FilterType {
     }
 }
 
-#[derive(Clone, Default, Deserialize, Debug)]
+#[derive(Clone, Default, Deserialize, Serialize, Debug)]
 #[serde(try_from = "String")]
 pub struct GroupExclude {
     group: Group,
@@ -134,7 +134,7 @@ impl From<Vec<GroupExclude>> for FilterType {
 mod tests {
 
     use k8s_openapi::{api::core::v1::Pod, Resource};
-    use kube_core::{ApiResource, DynamicObject, TypeMeta};
+    use kube::core::{ApiResource, DynamicObject, TypeMeta};
 
     use super::*;
 

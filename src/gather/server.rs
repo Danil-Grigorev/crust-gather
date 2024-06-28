@@ -19,7 +19,7 @@ use crate::gather::{
     writer::Archive,
 };
 
-use super::{representation::ArchivePath, writer::ArchiveSearch};
+use super::{reader::Selector, representation::ArchivePath, writer::ArchiveSearch};
 
 #[derive(Clone, Deserialize)]
 pub struct Socket(SocketAddr);
@@ -297,40 +297,44 @@ fn list_items(
 #[get("{server}/api/{version}/{kind}/{name}")]
 async fn cluster_get(
     get: Path<Get>,
+    query: Query<Selector>,
     reader: web::Data<HashMap<String, Reader>>,
 ) -> actix_web::Result<impl Responder> {
     Ok(web::Json(
-        get_item(get, reader).map_err(error::ErrorNotFound)?,
+        get_item(get, dbg!(query), reader).map_err(error::ErrorNotFound)?,
     ))
 }
 
 #[get("{server}/apis/{group}/{version}/{kind}/{name}")]
 async fn cluster_apis_get(
     get: Path<Get>,
+    query: Query<Selector>,
     reader: web::Data<HashMap<String, Reader>>,
 ) -> actix_web::Result<impl Responder> {
     Ok(web::Json(
-        get_item(get, reader).map_err(error::ErrorNotFound)?,
+        get_item(get, dbg!(query), reader).map_err(error::ErrorNotFound)?,
     ))
 }
 
 #[get("{server}/api/{version}/namespaces/{namespace}/{kind}/{name}")]
 async fn namespaced_get(
     get: Path<Get>,
+    query: Query<Selector>,
     reader: web::Data<HashMap<String, Reader>>,
 ) -> actix_web::Result<impl Responder> {
     Ok(web::Json(
-        get_item(get, reader).map_err(error::ErrorNotFound)?,
+        get_item(get, dbg!(query), reader).map_err(error::ErrorNotFound)?,
     ))
 }
 
 #[get("{server}/apis/{group}/{version}/namespaces/{namespace}/{kind}/{name}")]
 async fn namespaced_apis_get(
     get: Path<Get>,
+    query: Query<Selector>,
     reader: web::Data<HashMap<String, Reader>>,
 ) -> actix_web::Result<impl Responder> {
     Ok(web::Json(
-        get_item(get, reader).map_err(error::ErrorNotFound)?,
+        get_item(get, dbg!(query), reader).map_err(error::ErrorNotFound)?,
     ))
 }
 
@@ -349,6 +353,7 @@ async fn logs_get(
 
 fn get_item(
     get: Path<Get>,
+    query: Query<Selector>,
     reader: web::Data<HashMap<String, Reader>>,
 ) -> anyhow::Result<serde_json::Value> {
     reader

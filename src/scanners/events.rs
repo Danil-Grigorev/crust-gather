@@ -6,7 +6,7 @@ use k8s_openapi::{
     chrono::{DateTime, Utc},
 };
 use kube::Api;
-use kube_core::{ApiResource, TypeMeta};
+use kube::core::{ApiResource, TypeMeta};
 use std::{
     fmt::Debug,
     sync::{Arc, Mutex},
