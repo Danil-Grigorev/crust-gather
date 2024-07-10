@@ -276,7 +276,7 @@ pub struct Watch {
     pub watch: Option<bool>,
 }
 
-trait GatherObject: ResourceExt + Sized + Serialize {
+trait Timestamped: ResourceExt + Sized + Serialize {
     fn watch_event(self) -> WatchEvent<Self> {
         self.event()(self)
     }
@@ -326,32 +326,59 @@ trait GatherObject: ResourceExt + Sized + Serialize {
     }
 }
 
-impl<T: Resource + Serialize> GatherObject for T {}
+impl<T: Resource + Serialize> Timestamped for T {}
+
+#[derive(Clone, Debug)]
+enum TimestampedObject<T: Timestamped = DynamicObject> {
+    Static(T),
+    Dynamic(T),
+    FutureStatic(T),
+    FutureDynamic(T),
+}
 
 #[derive(Clone)]
 pub struct Reader {
     pub archive: Archive,
     pub diff: Duration,
     pub next_patch_time: Cell<Duration>,
-    pub objects_state: RefCell<HashMap<PathBuf, DynamicObject>>,
+    pub objects_state: RefCell<HashMap<PathBuf, Option<TimestampedObject>>>,
 }
 
 impl Reader {
-    pub fn new(archive: Archive, beginning: DateTime<Utc>) -> anyhow::Result<Self> {
+    pub fn new(
+        archive: Archive,
+        beginning: DateTime<Utc>,
+        watching: Option<ArchivePath>,
+    ) -> anyhow::Result<Self> {
         let path = ArchivePath::Custom(PathBuf::from_str("collected.timestamp")?);
-        let path = archive.join(path);
+        let path = archive.clone().join(path);
+        let diff = match path.exists() {
+            true => {
+                let file = File::open(path.clone())?;
+                let record_timestamp: DateTime<Utc> = serde_json::from_reader(file)?;
+                beginning.signed_duration_since(record_timestamp).to_std()?
+            }
+            false => Default::default(),
+        };
         Ok(Self {
-            archive,
-            diff: match path.exists() {
-                true => {
-                    let file = File::open(path)?;
-                    let record_timestamp: DateTime<Utc> = serde_json::from_reader(file)?;
-                    beginning.signed_duration_since(record_timestamp).to_std()?
-                }
-                false => Default::default(),
-            },
+            diff,
+            archive: archive.clone(),
             next_patch_time: Duration::MAX.into(),
-            objects_state: Default::default(),
+            objects_state: match watching {
+                Some(path) => {
+                    let path = archive.join(path);
+                    let mut objects = HashMap::new();
+                    let paths = glob::glob(path.to_str().map_or_else(
+                        || bail!("Unable to convert path to string: {path:?}"),
+                        Ok,
+                    )?)?;
+                    for object_path in paths {
+                        objects.insert(object_path?, Default::default());
+                    }
+                    RefCell::new(objects)
+                }
+                None => Default::default(),
+            },
         })
     }
 
@@ -385,10 +412,7 @@ impl Reader {
         log::trace!("Watching table {}...", list.get_path());
 
         let mut events = vec![];
-        for object in self
-            .objects(list.get_path())?
-            .filter(|obj| selector.filter(obj))
-        {
+        for object in self.objects()?.filter(|obj| selector.filter(obj)) {
             let crd_path = self.archive.join(list.get_crd_path().unwrap_or_default());
             let event = object.table_watch_event(crd_path, &list.version)?;
             events.push(event)
@@ -405,52 +429,85 @@ impl Reader {
     ) -> anyhow::Result<Vec<serde_json::Value>> {
         log::trace!("Watching list {}...", list.get_path());
 
-        self.objects(list.get_path())?
+        self.objects()?
             .filter(|obj| selector.filter(obj))
             .map(|obj| obj.watch_event())
             .map(|ev| serde_json::to_value(ev).map_err(Into::into))
             .collect()
     }
 
-    fn objects(&self, path: ArchivePath) -> anyhow::Result<impl Iterator<Item = DynamicObject>> {
+    fn objects(&self) -> anyhow::Result<impl Iterator<Item = DynamicObject>> {
         let mut new_objects = HashMap::new();
         let objects = self.objects_state.take();
-        let path = self.archive.join(path);
-        let paths = glob::glob(
-            path.to_str()
-                .map_or_else(|| bail!("Unable to convert path to string: {path:?}"), Ok)?,
-        )?;
+
         let mut items = vec![];
-        for path in paths {
-            let path = path?;
-            match objects.get(&path) {
-                Some(previous) if path.with_extension("patch").exists() => {
-                    new_objects.insert(path.clone(), previous.clone());
-                    let versions = self.interpolate(
-                        previous,
-                        path.with_extension("patch"),
-                        previous.last_sync_timestamp().unwrap_or_default(),
-                        self.archive_time(),
-                    )?;
-                    for version in versions
-                        .into_iter()
-                        .filter(|obj| obj.older(self.archive_time()))
-                    {
-                        new_objects.insert(path.clone(), version.clone());
-                        items.push(version);
+        for (path, object) in objects {
+            match object {
+                Some(object) => match object {
+                    TimestampedObject::Dynamic(previous) => {
+                        let versions = self.interpolate(
+                            &previous,
+                            path.with_extension("patch"),
+                            previous.last_sync_timestamp().unwrap_or_default(),
+                        )?;
+                        for version in versions
+                            .into_iter()
+                            .filter(|obj| obj.older(self.archive_time()))
+                        {
+                            items.push(version.clone());
+                            new_objects
+                                .insert(path.clone(), Some(TimestampedObject::Dynamic(version)));
+                        }
                     }
-                }
-                Some(previous) => {
-                    new_objects.insert(path, previous.clone());
-                }
+                    TimestampedObject::FutureDynamic(previous) => {
+                        let versions = self.interpolate(
+                            &previous,
+                            path.with_extension("patch"),
+                            previous.last_sync_timestamp().unwrap_or_default(),
+                        )?;
+                        for version in versions
+                            .into_iter()
+                            .filter(|obj| obj.older(self.archive_time()))
+                        {
+                            items.push(version.clone());
+                            new_objects
+                                .insert(path.clone(), Some(TimestampedObject::Dynamic(version)));
+                        }
+                    }
+                    TimestampedObject::FutureStatic(object) => {
+                        if object.older(self.archive_time()) {
+                            items.push(object.clone());
+                        }
+                    }
+                    TimestampedObject::Static(_) => (),
+                },
                 None => {
-                    for version in self
-                        .versions(path.clone())?
-                        .into_iter()
-                        .filter(|obj: &DynamicObject| obj.older(self.archive_time()))
-                    {
-                        new_objects.insert(path.clone(), version.clone());
-                        items.push(version);
+                    for version in self.versions::<DynamicObject>(path.clone())? {
+                        match version.older(self.archive_time()) {
+                            true => {
+                                items.push(version.clone());
+                                new_objects.insert(
+                                    path.clone(),
+                                    match path.with_extension("patch").exists() {
+                                        true => TimestampedObject::Dynamic(version),
+                                        false => TimestampedObject::Static(version),
+                                    }
+                                    .into(),
+                                );
+                            }
+                            false => {
+                                match path.with_extension("patch").exists() {
+                                    true => new_objects.insert(
+                                        path.clone(),
+                                        TimestampedObject::FutureDynamic(version).into(),
+                                    ),
+                                    false => new_objects.insert(
+                                        path.clone(),
+                                        TimestampedObject::FutureStatic(version).into(),
+                                    ),
+                                };
+                            }
+                        }
                     }
                 }
             };
@@ -533,7 +590,6 @@ impl Reader {
                         &original,
                         path.with_extension("patch"),
                         Default::default(),
-                        self.archive_time(),
                     )?)
                     .map(|version| serde_json::from_value(version).map_err(Into::into))
                     .collect()
@@ -552,10 +608,10 @@ impl Reader {
         target: &R,
         patches_file: PathBuf,
         from: DateTime<Utc>,
-        until: DateTime<Utc>,
     ) -> anyhow::Result<Vec<R>> {
         let mut target = serde_json::to_value(target)?;
         let mut versions = vec![];
+        let archive_time = self.archive_time();
         for list in Reader::read_lines(patches_file)? {
             let patches: Vec<PatchOperation> = serde_json::from_str(&list?)?;
             let mut do_apply = false;
@@ -568,8 +624,8 @@ impl Reader {
                             || path == Pointer::new(DELETED_PATH) =>
                     {
                         let last_sync_timestamp: DateTime<Utc> = serde_json::from_value(value)?;
-                        if last_sync_timestamp >= until {
-                            let wait_duration = (last_sync_timestamp - until).to_std()?;
+                        if last_sync_timestamp >= archive_time {
+                            let wait_duration = (last_sync_timestamp - archive_time).to_std()?;
                             self.next_patch_time
                                 .replace(self.next_patch_time.take().min(wait_duration));
                             return Ok(versions);

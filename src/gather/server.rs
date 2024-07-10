@@ -196,7 +196,7 @@ async fn version(
             .archives
             .get(server.get_server())
             .ok_or(error::ErrorNotFound(anyhow::anyhow!("Server not found")))?;
-        Reader::new(archive.clone(), state.serve_time)
+        Reader::new(archive.clone(), state.serve_time, None)
             .map_err(error::ErrorNotFound)?
             .load_raw(ArchivePath::Custom("version.yaml".into()))
             .map_err(error::ErrorNotFound)?
@@ -233,7 +233,7 @@ async fn api(
         .archives
         .get(server.get_server())
         .ok_or(error::ErrorNotFound(anyhow::anyhow!("Server not found")))?;
-    Ok(Reader::new(archive.clone(), state.serve_time)
+    Ok(Reader::new(archive.clone(), state.serve_time, None)
         .map_err(error::ErrorNotFound)?
         .load_raw(ArchivePath::Custom("api.json".into()))
         .map_err(error::ErrorNotFound)?
@@ -253,7 +253,7 @@ async fn apis(
         .archives
         .get(server.get_server())
         .ok_or(error::ErrorNotFound(anyhow::anyhow!("Server not found")))?;
-    Ok(Reader::new(archive.clone(), state.serve_time)
+    Ok(Reader::new(archive.clone(), state.serve_time, None)
         .map_err(error::ErrorNotFound)?
         .load_raw(ArchivePath::Custom("apis.json".into()))
         .map_err(error::ErrorNotFound)?
@@ -334,7 +334,7 @@ fn list_items(
         .archives
         .get(list.get_server())
         .ok_or(anyhow::anyhow!("Server not found"))?;
-    let reader = Reader::new(archive.clone(), state.serve_time)?;
+    let reader = Reader::new(archive.clone(), state.serve_time, None)?;
     Ok(match accept.0.as_slice() {
         [QualityItem { item, .. }, ..] if item.to_string().contains("as=Table") => {
             reader.load_table(list.clone(), query.0)?
@@ -383,7 +383,8 @@ fn watch_response(
         .get(list.get_server())
         .ok_or(anyhow::anyhow!("Server not found"))
         .map_err(error::ErrorNotFound)?;
-    let reader = Reader::new(archive.clone(), state.serve_time).map_err(error::ErrorNotFound)?;
+    let reader =
+        Reader::new(archive.clone(), state.serve_time, list.get_path().into()).map_err(error::ErrorNotFound)?;
     let mut refresh = Instant::now();
     let s = stream! {
         loop {
@@ -455,7 +456,8 @@ async fn logs_get(
         .get(get.get_server())
         .ok_or(anyhow::anyhow!("Server not found"))
         .map_err(error::ErrorNotFound)?;
-    let reader = Reader::new(archive.clone(), state.serve_time).map_err(error::ErrorNotFound)?;
+    let reader =
+        Reader::new(archive.clone(), state.serve_time, None).map_err(error::ErrorNotFound)?;
     reader
         .load_raw(get.get_logs_path(query.deref()))
         .map_err(error::ErrorNotFound)
@@ -466,6 +468,6 @@ fn get_item(get: Path<Get>, state: web::Data<ApiState>) -> anyhow::Result<serde_
         .archives
         .get(get.get_server())
         .ok_or(anyhow::anyhow!("Server not found"))?;
-    let reader = Reader::new(archive.clone(), state.serve_time)?;
+    let reader = Reader::new(archive.clone(), state.serve_time, None)?;
     reader.load(get.clone())
 }
