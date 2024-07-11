@@ -1,6 +1,5 @@
 use std::{
     cell::{Cell, RefCell},
-    collections::HashMap,
     fs::File,
     io::{self, BufRead as _, Read},
     path::PathBuf,
@@ -9,6 +8,7 @@ use std::{
 };
 
 use anyhow::bail;
+use indexmap::IndexMap;
 use json_patch::{patch, AddOperation, PatchOperation, ReplaceOperation};
 use jsonptr::Pointer;
 use k8s_openapi::{
@@ -25,6 +25,7 @@ use kube::{
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json_path::JsonPath;
+use tokio::time::Instant;
 
 use crate::scanners::interface::{ADDED_ANNOTATION, DELETED_ANNOTATION, UPDATED_ANNOTATION};
 
@@ -306,6 +307,11 @@ trait Timestamped: ResourceExt + Sized + Serialize {
         }
     }
 
+    fn newer(&self, after: DateTime<Utc>) -> bool {
+        let passed = || Some(after <= self.last_sync_timestamp()?);
+        passed().is_some_and(|is_true| is_true)
+    }
+
     fn older(&self, before: DateTime<Utc>) -> bool {
         let passed = || Some(before >= self.last_sync_timestamp()?);
         passed().is_some_and(|is_true| is_true)
@@ -330,18 +336,26 @@ impl<T: Resource + Serialize> Timestamped for T {}
 
 #[derive(Clone, Debug)]
 enum TimestampedObject<T: Timestamped = DynamicObject> {
-    Static(T),
     Dynamic(T),
-    FutureStatic(T),
-    FutureDynamic(T),
+    Future(T),
+}
+
+impl<T: Timestamped> TimestampedObject<T> {
+    fn object(self) -> T {
+        match self {
+            TimestampedObject::Dynamic(obj) => obj,
+            TimestampedObject::Future(obj) => obj,
+        }
+    }
 }
 
 #[derive(Clone)]
 pub struct Reader {
-    pub archive: Archive,
-    pub diff: Duration,
     pub next_patch_time: Cell<Duration>,
-    pub objects_state: RefCell<HashMap<PathBuf, Option<TimestampedObject>>>,
+    call_time: Cell<Instant>,
+    archive: Archive,
+    diff: Duration,
+    objects_state: RefCell<IndexMap<PathBuf, Option<TimestampedObject>>>,
 }
 
 impl Reader {
@@ -364,10 +378,11 @@ impl Reader {
             diff,
             archive: archive.clone(),
             next_patch_time: Duration::MAX.into(),
+            call_time: Instant::now().into(),
             objects_state: match watching {
                 Some(path) => {
                     let path = archive.join(path);
-                    let mut objects = HashMap::new();
+                    let mut objects = IndexMap::new();
                     let paths = glob::glob(path.to_str().map_or_else(
                         || bail!("Unable to convert path to string: {path:?}"),
                         Ok,
@@ -389,6 +404,10 @@ impl Reader {
 
     fn archive_time(&self) -> DateTime<Utc> {
         Utc::now() - self.diff
+    }
+
+    fn served_from(&self) -> DateTime<Utc> {
+        self.archive_time() - self.call_time.get().elapsed()
     }
 
     fn table(&self, list: List, selector: Selector) -> anyhow::Result<Table> {
@@ -437,75 +456,85 @@ impl Reader {
     }
 
     fn objects(&self) -> anyhow::Result<impl Iterator<Item = DynamicObject>> {
-        let mut new_objects = HashMap::new();
+        let mut new_objects = IndexMap::new();
         let objects = self.objects_state.take();
 
         let mut items = vec![];
         for (path, object) in objects {
             match object {
-                Some(object) => match object {
-                    TimestampedObject::Dynamic(previous) => {
-                        let versions = self.interpolate(
-                            &previous,
-                            path.with_extension("patch"),
-                            previous.last_sync_timestamp().unwrap_or_default(),
-                        )?;
-                        for version in versions
-                            .into_iter()
-                            .filter(|obj| obj.older(self.archive_time()))
-                        {
+                Some(dynamic @ TimestampedObject::Dynamic(_)) => {
+                    new_objects.insert(path.clone(), dynamic.clone().into());
+                    let previous = dynamic.object();
+                    let versions = self.interpolate(
+                        &previous,
+                        path.with_extension("patch"),
+                        previous.last_sync_timestamp().unwrap_or_default(),
+                    )?;
+                    for version in versions {
+                        if version.older(self.archive_time()) {
                             items.push(version.clone());
-                            new_objects
-                                .insert(path.clone(), Some(TimestampedObject::Dynamic(version)));
                         }
+                        new_objects
+                            .insert(path.clone(), TimestampedObject::Dynamic(version).into());
                     }
-                    TimestampedObject::FutureDynamic(previous) => {
-                        let versions = self.interpolate(
-                            &previous,
-                            path.with_extension("patch"),
-                            previous.last_sync_timestamp().unwrap_or_default(),
-                        )?;
-                        for version in versions
-                            .into_iter()
-                            .filter(|obj| obj.older(self.archive_time()))
-                        {
-                            items.push(version.clone());
-                            new_objects
-                                .insert(path.clone(), Some(TimestampedObject::Dynamic(version)));
-                        }
-                    }
-                    TimestampedObject::FutureStatic(object) => {
-                        if object.older(self.archive_time()) {
+                }
+                Some(future @ TimestampedObject::Future(_)) => {
+                    let object = future.clone().object();
+                    match object.older(self.archive_time()) {
+                        true => {
                             items.push(object.clone());
-                        }
-                    }
-                    TimestampedObject::Static(_) => (),
-                },
-                None => {
-                    for version in self.versions::<DynamicObject>(path.clone())? {
-                        match version.older(self.archive_time()) {
-                            true => {
+                            if !path.with_extension("patch").exists() {
+                                continue;
+                            }
+                            let versions = self.interpolate(
+                                &object,
+                                path.with_extension("patch"),
+                                object.last_sync_timestamp().unwrap_or_default(),
+                            )?;
+                            for version in versions
+                                .into_iter()
+                                .filter(|obj| obj.older(self.archive_time()))
+                            {
                                 items.push(version.clone());
                                 new_objects.insert(
                                     path.clone(),
-                                    match path.with_extension("patch").exists() {
-                                        true => TimestampedObject::Dynamic(version),
-                                        false => TimestampedObject::Static(version),
-                                    }
-                                    .into(),
+                                    TimestampedObject::Dynamic(version).into(),
                                 );
                             }
+                        }
+                        false => {
+                            new_objects.insert(path.clone(), future.clone().into());
+                            let last_sync_timestamp = future
+                                .object()
+                                .last_sync_timestamp()
+                                .unwrap_or(DateTime::<Utc>::MAX_UTC);
+                            let wait_duration =
+                                (last_sync_timestamp - self.archive_time()).to_std()?;
+                            self.next_patch_time
+                                .replace(self.next_patch_time.take().min(wait_duration));
+                        }
+                    }
+                }
+                None => {
+                    for version in self.versions::<DynamicObject>(path.clone())?.into_iter() {
+                        match version.older(self.archive_time()) {
+                            true => {
+                                if path.with_extension("patch").exists() {
+                                    new_objects.insert(
+                                        path.clone(),
+                                        TimestampedObject::Dynamic(version.clone()).into(),
+                                    );
+                                }
+                                items.push(version);
+                                // if version.newer(self.served_from()) {
+                                //     break;
+                                // }
+                            }
                             false => {
-                                match path.with_extension("patch").exists() {
-                                    true => new_objects.insert(
-                                        path.clone(),
-                                        TimestampedObject::FutureDynamic(version).into(),
-                                    ),
-                                    false => new_objects.insert(
-                                        path.clone(),
-                                        TimestampedObject::FutureStatic(version).into(),
-                                    ),
-                                };
+                                new_objects.insert(
+                                    path.clone(),
+                                    TimestampedObject::Future(version.clone()).into(),
+                                );
                             }
                         }
                     }
@@ -580,10 +609,22 @@ impl Reader {
     // Collect a sequence of versions for the given object until clusters equivalent of Utc::now()
     fn versions<R: DeserializeOwned>(&self, path: PathBuf) -> anyhow::Result<Vec<R>> {
         let object = File::open(path.clone())?;
+        let original: DynamicObject = serde_yaml::from_reader(object)?;
+        if let Some(last_sync_timestamp) = original.last_sync_timestamp() {
+            let archive_time = self.archive_time();
+            if last_sync_timestamp >= archive_time {
+                let wait_duration = (last_sync_timestamp - archive_time).to_std()?;
+                self.next_patch_time
+                    .replace(self.next_patch_time.take().min(wait_duration));
+            }
+        };
         match path.with_extension("patch").exists() {
-            false => Ok(vec![serde_yaml::from_reader(object)?]),
+            false => {
+                let original = serde_json::to_value(original)?;
+                Ok(vec![serde_json::from_value(original)?])
+            }
             true => {
-                let original: serde_json::Value = serde_yaml::from_reader(object)?;
+                let original = serde_json::to_value(original)?;
                 Some(original.clone())
                     .into_iter()
                     .chain(self.interpolate(
@@ -611,7 +652,7 @@ impl Reader {
     ) -> anyhow::Result<Vec<R>> {
         let mut target = serde_json::to_value(target)?;
         let mut versions = vec![];
-        let archive_time = self.archive_time();
+        let until = self.archive_time();
         for list in Reader::read_lines(patches_file)? {
             let patches: Vec<PatchOperation> = serde_json::from_str(&list?)?;
             let mut do_apply = false;
@@ -624,8 +665,8 @@ impl Reader {
                             || path == Pointer::new(DELETED_PATH) =>
                     {
                         let last_sync_timestamp: DateTime<Utc> = serde_json::from_value(value)?;
-                        if last_sync_timestamp >= archive_time {
-                            let wait_duration = (last_sync_timestamp - archive_time).to_std()?;
+                        if last_sync_timestamp >= until {
+                            let wait_duration = (last_sync_timestamp - until).to_std()?;
                             self.next_patch_time
                                 .replace(self.next_patch_time.take().min(wait_duration));
                             return Ok(versions);

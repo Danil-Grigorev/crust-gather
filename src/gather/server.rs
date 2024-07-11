@@ -383,8 +383,8 @@ fn watch_response(
         .get(list.get_server())
         .ok_or(anyhow::anyhow!("Server not found"))
         .map_err(error::ErrorNotFound)?;
-    let reader =
-        Reader::new(archive.clone(), state.serve_time, list.get_path().into()).map_err(error::ErrorNotFound)?;
+    let reader = Reader::new(archive.clone(), state.serve_time, list.get_path().into())
+        .map_err(error::ErrorNotFound)?;
     let mut refresh = Instant::now();
     let s = stream! {
         loop {
