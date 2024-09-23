@@ -132,27 +132,42 @@ pub struct KubeconfigFile(pub Kubeconfig);
 
 impl KubeconfigFile {
     /// Creates a new Kubernetes client from the `KubeconfigFile`.
-    pub async fn client(&self, insecure: bool) -> anyhow::Result<Client> {
+    pub async fn client(&self, insecure: bool) -> anyhow::Result<Vec<Client>> {
         let kubeconfig = match insecure {
             true => KubeconfigFile::insecure(self.into()),
             false => self.into(),
         };
 
-        Ok(Client::try_from(
-            kube::Config::from_custom_kubeconfig(kubeconfig, &KubeConfigOptions::default()).await?,
-        )?)
+        KubeconfigFile::open_clients(kubeconfig).await
     }
 
     /// Creates a new Kubernetes client from the inferred config.
-    pub async fn infer(insecure: bool) -> anyhow::Result<Client> {
+    pub async fn infer(insecure: bool) -> anyhow::Result<Vec<Client>> {
         let kubeconfig = match insecure {
             true => KubeconfigFile::insecure(Kubeconfig::read()?),
             false => Kubeconfig::read()?,
         };
 
-        Ok(Client::try_from(
-            kube::Config::from_custom_kubeconfig(kubeconfig, &KubeConfigOptions::default()).await?,
-        )?)
+        KubeconfigFile::open_clients(kubeconfig).await
+    }
+
+    async fn open_clients(config: Kubeconfig) -> anyhow::Result<Vec<Client>> {
+        let mut clients = vec![];
+        for context in &config.contexts {
+            let client = Client::try_from(
+                kube::Config::from_custom_kubeconfig(
+                    config.clone(),
+                    &KubeConfigOptions {
+                        context: Some(context.name.clone()),
+                        ..Default::default()
+                    },
+                )
+                .await?,
+            )?;
+            clients.push(client);
+        }
+
+        Ok(clients)
     }
 
     fn insecure(config: kube::config::Kubeconfig) -> kube::config::Kubeconfig {

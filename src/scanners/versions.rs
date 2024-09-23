@@ -168,7 +168,7 @@ mod tests {
         )
         .unwrap();
 
-        let config = commands.load().await.unwrap();
+        let config = commands.load().await.unwrap()[0].clone();
 
         config.collect().await.unwrap();
         assert!(tmp_dir

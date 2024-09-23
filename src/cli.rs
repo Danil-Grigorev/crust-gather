@@ -104,14 +104,17 @@ impl Commands {
                     .await
             }
             Commands::CollectFromConfig { source, overrides } => {
-                source
-                    .gather(overrides.origin_client().await?)
-                    .await?
-                    .merge(overrides)
-                    .load()
-                    .await?
-                    .collect()
-                    .await
+                for client in overrides.origin_clients().await? {
+                    source
+                        .gather(client)
+                        .await?
+                        .merge(overrides)
+                        .load()
+                        .await?
+                        .collect()
+                        .await?;
+                }
+                Ok(())
             }
             Commands::Serve { serve } => serve.get_api()?.serve().await.map_err(|e| anyhow!(e)),
             Commands::Record { config } => {
@@ -127,7 +130,7 @@ impl Commands {
             }
             Commands::RecordFromConfig { source, overrides } => {
                 let config = source
-                    .gather(overrides.origin_client().await?)
+                    .gather(overrides.origin_clients().await?)
                     .await?
                     .merge(overrides);
                 let config = GatherCommands {
@@ -247,6 +250,11 @@ impl GatherSettings {
     pub fn merge(&self, other: Self) -> Self {
         Self {
             kubeconfig: other.kubeconfig.or(self.kubeconfig.clone()),
+            contexts: if other.contexts.is_empty() {
+                self.contexts.clone()
+            } else {
+                other.contexts
+            },
             kubeconfig_secret: other.kubeconfig_secret.or(self.kubeconfig_secret.clone()),
             insecure_skip_tls_verify: other
                 .insecure_skip_tls_verify
@@ -275,6 +283,15 @@ pub struct GatherSettings {
     #[arg(short, long, value_name = "PATH",
         value_parser = |arg: &str| -> anyhow::Result<KubeconfigFile> {Ok(KubeconfigFile::try_from(arg.to_string())?)})]
     kubeconfig: Option<KubeconfigFile>,
+
+    /// Use specific contexts for collection.
+    /// If not provided, will attempt to use all existing contexts.
+    ///
+    /// Example:
+    ///     --context=local --context=remote
+    #[arg(short, long, action = ArgAction::Append)]
+    #[serde(default)]
+    contexts: Vec<String>,
 
     /// Collect kubeconfig from a secret.
     #[command(flatten)]
@@ -347,11 +364,15 @@ pub struct GatherSettings {
 }
 
 impl GatherSettings {
-    pub async fn client(&self) -> anyhow::Result<Client> {
-        let origin = self.origin_client().await?;
+    pub async fn clients(&self, context: Option<String>) -> anyhow::Result<Vec<Client>> {
+        let origin = self.origin_clients().await?;
         match &self.kubeconfig_secret {
             Some(secret) => {
-                let kubeconfigs = secret.get_config(origin).await?;
+                let mut kubeconfigs = vec![];
+                for client in origin {
+                    kubeconfigs.extend(secret.get_config(client).await?);
+                }
+
                 for kubeconfig in kubeconfigs {
                     match KubeconfigFile(kubeconfig)
                         .client(self.insecure_skip_tls_verify.unwrap_or_default())
@@ -370,7 +391,7 @@ impl GatherSettings {
         }
     }
 
-    pub async fn origin_client(&self) -> anyhow::Result<Client> {
+    pub async fn origin_clients(&self) -> anyhow::Result<Vec<Client>> {
         tracing::info!("Initializing client...");
 
         match &self.kubeconfig {
@@ -564,7 +585,7 @@ impl TryFrom<String> for GatherCommands {
 }
 
 impl GatherCommands {
-    pub async fn load(&self) -> anyhow::Result<Config> {
+    pub async fn load(&self, context: String) -> anyhow::Result<Config> {
         let env_secrets: Secrets = self.settings.secrets.clone().into();
         let mut secrets: Secrets = match self.settings.secrets_file.clone() {
             Some(file) => file.clone().try_into()?,
@@ -590,8 +611,8 @@ impl GatherCommands {
         ))
     }
 
-    async fn client(&self) -> anyhow::Result<Client> {
-        self.settings.client().await
+    async fn clients(&self) -> anyhow::Result<Vec<Client>> {
+        self.settings.clients().await
     }
 }
 
@@ -669,7 +690,7 @@ mod tests {
             ..Default::default()
         };
 
-        let client = commands.client().await.unwrap();
+        let client = commands.clients().await.unwrap()[0].clone();
 
         let ns_api: Api<Namespace> = Api::all(client);
         ns_api.list(&ListParams::default()).await.unwrap();
@@ -698,7 +719,7 @@ mod tests {
             ..Default::default()
         };
 
-        let client = commands.client().await.unwrap();
+        let client = commands.clients().await.unwrap()[0].clone();
 
         let ns_api: Api<Namespace> = Api::all(client);
         ns_api.list(&ListParams::default()).await.unwrap();
@@ -719,7 +740,7 @@ mod tests {
             .unwrap();
 
         let commands = GatherCommands::default();
-        let client = commands.client().await.unwrap();
+        let client = commands.clients().await.unwrap()[0].clone();
 
         let ns_api: Api<Namespace> = Api::all(client);
         ns_api.list(&ListParams::default()).await.unwrap();
@@ -744,7 +765,7 @@ mod tests {
             },
             ..GatherCommands::default()
         };
-        let client = commands.client().await.unwrap();
+        let client = commands.clients().await.unwrap()[0].clone();
 
         let ns_api: Api<Namespace> = Api::all(client);
         ns_api.list(&ListParams::default()).await.unwrap();
