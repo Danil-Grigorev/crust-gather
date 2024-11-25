@@ -18,11 +18,14 @@ case $go_os in
 esac
 
 # Find artifacts and uncompress in the corresponding directory
-found=$(find artifacts -name "*${rust_arch}*${rust_os}*")
-echo Looking for artifacts in $(pwd)/artifacts: $found
-if [ -n "$found" ]; then
-    echo Artifacts found - removing content of dist: $(find dist/${project_name}_${go_os}_${go_arch}*)
-    rm dist/${project_name}_${go_os}_${go_arch}*/* -f
+dist=$(find artifacts -name "*${rust_arch}*${rust_os}*")
+echo Looking for artifacts in $(pwd)/artifacts: $dist
+if [ -n "$dist" ]; then
+    echo Artifacts dist - removing content of dist: $(find dist/${project_name}_${go_os}_${go_arch}*)
+    rm ${dist}/* -f
+    mkdir -p ./${dist};
+    cp ./artifacts/*${rust_arch}*${rust_os}*/* ./${dist}
+    chmod +x ./${dist}/*
 fi
 
 mkdir -p dist/${project_name}_${go_os}_${go_arch}_v1;
