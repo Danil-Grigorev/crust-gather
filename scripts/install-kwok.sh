@@ -19,7 +19,7 @@ get_var() {
 # Variables preparation
 DEST_DIR="${1}"
 KWOK_REPO=kubernetes-sigs/kwok
-KWOK_RELEASE="${2:-v0.4.0}"
+KWOK_RELEASE="${2:-v0.6.1}"
 OS=$(get_var GOOS $GOOS)
 ARCH=$(get_var GOARCH $GOARCH)
 

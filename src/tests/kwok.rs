@@ -1,7 +1,18 @@
 //! Test helper to create a temporary kwok cluster.
+use std::sync::OnceLock;
+use std::{collections::HashSet, sync::LazyLock};
+use std::net::TcpListener;
+use std::net::UdpSocket;
+use tokio::sync::Mutex;
 use std::{convert::TryFrom, env, fs, path::PathBuf, process::Command};
 
 use kube::{config::Kubeconfig, Client, Config};
+
+fn ports() -> &'static Mutex<HashSet<u16>> {
+    static PORTS: OnceLock<Mutex<HashSet<u16>>> = OnceLock::new();
+    PORTS.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
 
 /// Struct to manage a temporary kwok cluster.
 #[derive(Default)]
@@ -10,6 +21,19 @@ pub struct TestEnv {
     name: String,
     // Kubeconfig of the temporary cluster.
     kubeconfig: Kubeconfig,
+}
+
+async fn get_available_port() -> u16 {
+    let mut ports = ports().lock().await;
+    loop {
+        if let Some(port) = (30000..33000).find_map(|port| {
+            TcpListener::bind(("127.0.0.1", port)).ok()?;
+            UdpSocket::bind(("127.0.0.1", port)).ok()?;
+            ports.insert(port).then_some(port)
+        }) {
+            return port;
+        }
+    }
 }
 
 /// `TestEnv` manages a temporary Kwok test cluster.
@@ -23,8 +47,8 @@ impl TestEnv {
     }
 
     /// Create the default minimal test environment.
-    pub fn new() -> Self {
-        Self::builder().build()
+    pub async fn new() -> Self {
+        Self::builder().build().await
     }
 
     /// Deletes the temporary Kwok cluster and removes the kubeconfig file.
@@ -121,7 +145,17 @@ impl TestEnvBuilder {
     }
 
     /// Create the test environment.
-    pub fn build(&self) -> TestEnv {
+    pub async fn build(&self) -> TestEnv {
+        let port = get_available_port().await;
+        let etcd_port = port.to_string();
+        let secure_port = get_available_port().await;
+        let kube_secure_port = secure_port.to_string();
+        let apiserver_port = get_available_port().await;
+        let kube_apiserver_port = apiserver_port.to_string();
+        let scheduler_port = get_available_port().await;
+        let kube_scheduler_port = scheduler_port.to_string();
+        let controller_manager_port = get_available_port().await;
+        let kube_controller_manager_port = controller_manager_port.to_string();
         let cluster = xid::new().to_string();
         let name = cluster.clone();
         let mut args = vec![
@@ -129,6 +163,16 @@ impl TestEnvBuilder {
             "cluster",
             "--name",
             name.as_str(),
+            "--etcd-port",
+            &etcd_port,
+            // "--secure-port",
+            // &kube_secure_port,
+            "--kube-apiserver-port",
+            &kube_apiserver_port,
+            "--kube-scheduler-port",
+            &kube_scheduler_port,
+            // "--kube-controller-manager-port",
+            // &kube_controller_manager_port,
             "--wait",
             self.wait.as_str(),
         ];
@@ -162,12 +206,27 @@ impl TestEnvBuilder {
         }
 
         // Output the cluster's kubeconfig to stdout and store it.
-        let stdout = Command::new("kwokctl")
-            .args(&args)
-            .output()
-            .expect("kwokctl get kubeconfig failed")
-            .stdout;
+        let stdout = match Command::new("kwokctl").args(&args).output() {
+            Ok(out) => out,
+            e => {
+                TestEnv {
+                    name: name.clone(),
+                    kubeconfig: Default::default(),
+                }
+                .delete();
+                e.expect("kwokctl get kubeconfig failed")
+            }
+        }
+        .stdout;
+
         let stdout = std::str::from_utf8(&stdout).expect("valid string");
+
+        let mut ports = ports().lock().await;
+        ports.remove(&port);
+        ports.remove(&apiserver_port);
+        ports.remove(&scheduler_port);
+        ports.remove(&controller_manager_port);
+        ports.remove(&secure_port);
 
         TestEnv {
             name,
@@ -196,7 +255,7 @@ mod test {
     async fn sanity() {
         let test_env = kwok::TestEnvBuilder::default()
             .insecure_skip_tls_verify(true)
-            .build();
+            .build().await;
         let pod_api: Api<DynamicObject> =
             Api::default_namespaced_with(test_env.client().await, &ApiResource::erase::<Pod>(&()));
 

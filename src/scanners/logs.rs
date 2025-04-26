@@ -182,7 +182,7 @@ mod test {
     async fn collect_logs() {
         let test_env = kwok::TestEnvBuilder::default()
             .insecure_skip_tls_verify(true)
-            .build();
+            .build().await;
         let filter = NamespaceInclude::try_from("default".to_string()).unwrap();
 
         let pod_api: Api<Pod> = Api::default_namespaced(test_env.client().await);

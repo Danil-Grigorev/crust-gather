@@ -114,7 +114,7 @@ mod test {
     async fn collect_dynamic_object() {
         let test_env = kwok::TestEnvBuilder::default()
             .insecure_skip_tls_verify(true)
-            .build();
+            .build().await;
         let filter = NamespaceInclude::try_from("default".to_string()).unwrap();
 
         let api: Api<DynamicObject> =

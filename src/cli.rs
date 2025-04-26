@@ -646,11 +646,10 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    #[serial]
     async fn test_client_from_kubeconfig() {
         let test_env = kwok::TestEnvBuilder::default()
             .insecure_skip_tls_verify(true)
-            .build();
+            .build().await;
 
         let kubeconfig = serde_yaml::to_string(&test_env.kubeconfig()).unwrap();
         fs::write(test_env.kubeconfig_path(), kubeconfig)
@@ -676,9 +675,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     async fn test_insecure_client_from_kubeconfig() {
-        let test_env = kwok::TestEnvBuilder::default().build();
+        let test_env = kwok::TestEnvBuilder::default().build().await;
 
         let kubeconfig = serde_yaml::to_string(&test_env.kubeconfig()).unwrap();
         fs::write(test_env.kubeconfig_path(), kubeconfig)
@@ -705,11 +703,10 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     async fn test_client_from_default() {
         let test_env = kwok::TestEnvBuilder::default()
             .insecure_skip_tls_verify(true)
-            .build();
+            .build().await;
 
         env::set_var("KUBECONFIG", test_env.kubeconfig_path().to_str().unwrap());
 
@@ -726,9 +723,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     async fn test_insecure_client_from_default() {
-        let test_env = kwok::TestEnvBuilder::default().build();
+        let test_env = kwok::TestEnvBuilder::default().build().await;
 
         env::set_var("KUBECONFIG", test_env.kubeconfig_path().to_str().unwrap());
 
@@ -751,9 +747,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     async fn test_collect() {
-        let test_env = kwok::TestEnvBuilder::default().build();
+        let test_env = kwok::TestEnvBuilder::default().build().await;
 
         env::set_var("KUBECONFIG", test_env.kubeconfig_path().to_str().unwrap());
 
@@ -792,9 +787,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial]
     async fn test_collect_from_config() {
-        let test_env = kwok::TestEnvBuilder::default().build();
+        let test_env = kwok::TestEnvBuilder::default().build().await;
 
         env::set_var("KUBECONFIG", test_env.kubeconfig_path().to_str().unwrap());
 
@@ -851,7 +845,7 @@ mod tests {
     async fn test_collect_from_config_map() {
         let test_env = kwok::TestEnvBuilder::default()
             .insecure_skip_tls_verify(true)
-            .build();
+            .build().await;
 
         env::set_var("KUBECONFIG", test_env.kubeconfig_path().to_str().unwrap());
 
@@ -917,8 +911,8 @@ mod tests {
     async fn test_collect_kubeconfig_from_secret() {
         let test_env = kwok::TestEnvBuilder::default()
             .insecure_skip_tls_verify(true)
-            .build();
-        let other_env = kwok::TestEnvBuilder::default().build();
+            .build().await;
+        let other_env = kwok::TestEnvBuilder::default().build().await;
 
         env::set_var("KUBECONFIG", test_env.kubeconfig_path().to_str().unwrap());
 
@@ -1056,8 +1050,8 @@ mod tests {
     async fn test_collect_kubeconfig_from_secret_by_name() {
         let test_env = kwok::TestEnvBuilder::default()
             .insecure_skip_tls_verify(true)
-            .build();
-        let other_env = kwok::TestEnvBuilder::default().build();
+            .build().await;
+        let other_env = kwok::TestEnvBuilder::default().build().await;
 
         env::set_var("KUBECONFIG", test_env.kubeconfig_path().to_str().unwrap());
 

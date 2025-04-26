@@ -108,7 +108,7 @@ mod tests {
     async fn test_collect_versions() {
         let test_env = kwok::TestEnvBuilder::default()
             .insecure_skip_tls_verify(true)
-            .build();
+            .build().await;
 
         let kubeconfig = serde_yaml::to_string(&test_env.kubeconfig()).unwrap();
         fs::write(test_env.kubeconfig_path(), kubeconfig)

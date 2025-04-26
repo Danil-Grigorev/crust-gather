@@ -136,7 +136,7 @@ mod test {
     async fn collect_pod() {
         let test_env = kwok::TestEnvBuilder::default()
             .insecure_skip_tls_verify(true)
-            .build();
+            .build().await;
 
         let filter = NamespaceInclude::try_from("default".to_string()).unwrap();
 
@@ -200,7 +200,7 @@ mod test {
     async fn test_path_cluster_scoped() {
         let test_env = kwok::TestEnvBuilder::default()
             .insecure_skip_tls_verify(true)
-            .build();
+            .build().await;
 
         let obj = DynamicObject::new("test", &ApiResource::erase::<Namespace>(&()));
 
@@ -229,7 +229,7 @@ mod test {
     async fn test_path_namespaced() {
         let test_env = kwok::TestEnvBuilder::default()
             .insecure_skip_tls_verify(true)
-            .build();
+            .build().await;
         let obj = DynamicObject::new("test", &ApiResource::erase::<Pod>(&())).within("default");
 
         let collectable = Objects::new(
