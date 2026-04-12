@@ -161,23 +161,23 @@ impl KubeconfigFile {
     }
 
     /// Creates a new Kubernetes client from the `KubeconfigFile`.
-    pub async fn client(&self, insecure: bool) -> anyhow::Result<Client> {
+    pub async fn client(&self, insecure: bool) -> Result<Client, kube::Error> {
         let kubeconfig = match insecure {
             true => KubeconfigFile::insecure(self.into()),
             false => self.into(),
         };
 
-        Ok(kubeconfig.try_into()?)
+        kubeconfig.try_into()
     }
 
     /// Creates a new Kubernetes client from the inferred config.
-    pub async fn infer(insecure: bool) -> anyhow::Result<Client> {
+    pub async fn infer(insecure: bool) -> Result<Client, kube::Error> {
         let kubeconfig = match insecure {
             true => KubeconfigFile::insecure(Kubeconfig::read()?),
             false => Kubeconfig::read()?,
         };
 
-        Ok(kubeconfig.try_into()?)
+        kubeconfig.try_into()
     }
 
     fn insecure(config: kube::config::Kubeconfig) -> kube::config::Kubeconfig {
