@@ -6,7 +6,10 @@ use std::{
 use anyhow::anyhow;
 use clap::{ArgAction, Parser, Subcommand};
 use k8s_openapi::serde::{Deserialize, Serialize};
-use kube::{Client, config::Kubeconfig};
+use kube::{
+    Client,
+    config::{Kubeconfig, KubeconfigError},
+};
 use oci_client::{
     Reference,
     client::{self, ClientConfig, ClientProtocol},
@@ -407,7 +410,7 @@ pub struct GatherSettings {
 #[serde(deny_unknown_fields)]
 pub struct OCISettings {
     /// Token to use for the registry authentication
-    #[arg(short, long)]
+    #[arg(short, long, env = "OCI_AUTH_TOKEN")]
     #[arg(conflicts_with = "regular")]
     #[serde(default)]
     pub token: Option<String>,
@@ -495,11 +498,11 @@ impl TryFrom<String> for OCIReference {
 #[group(id = "regular", conflicts_with = "token")]
 pub struct UsernamePassword {
     /// Username to use for the registry authentication
-    #[arg(short, long, required = false)]
+    #[arg(short, long, env = "OCI_AUTH_USERNAME", required = false)]
     pub username: String,
 
     /// Password to use for the registry authentication
-    #[arg(short, long, required = false)]
+    #[arg(short, long, env = "OCI_AUTH_PASSWORD", required = false)]
     pub password: String,
 }
 
@@ -587,14 +590,25 @@ impl GatherSettings {
     pub async fn origin_client(&self) -> anyhow::Result<Client> {
         tracing::info!("Initializing client...");
 
-        match &self.kubeconfig {
+        let client = match &self.kubeconfig {
             Some(kubeconfig) => {
                 kubeconfig
                     .client(self.insecure_skip_tls_verify.unwrap_or_default())
                     .await
             }
             None => KubeconfigFile::infer(self.insecure_skip_tls_verify.unwrap_or_default()).await,
+        };
+
+        // Follow the in-cluster scenario
+        if let Err(kube::Error::InferKubeconfig(e)) = &client
+            && matches!(e, KubeconfigError::ReadConfig(..))
+        {
+            return Client::try_default()
+                .await
+                .map_err(|_| anyhow::anyhow!("Failed to infer default client: {e}"));
         }
+
+        client.map_err(|e| anyhow::anyhow!("Failed to initialize client from kubeconfig: {e}"))
     }
 
     pub async fn to_writer(&self) -> anyhow::Result<Writer> {
