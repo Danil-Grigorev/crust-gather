@@ -180,32 +180,32 @@ jobs:
           helm package charts/crust-gather --destination dist
           helm push "dist/crust-gather-${chart_version}.tgz" "oci://${HELM_REGISTRY}/${repo_owner_lc}"
 
-  release:
-    name: Release
-    needs: [docker, helm-chart]
-    # We run the release job only if a tag starts with 'v' letter
-    if: startsWith( github.ref, 'refs/tags/v' )
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout Git repo
-        uses: actions/checkout@v6
+  # release:
+  #   name: Release
+  #   needs: [docker, helm-chart]
+  #   # We run the release job only if a tag starts with 'v' letter
+  #   if: startsWith( github.ref, 'refs/tags/v' )
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #     - name: Checkout Git repo
+  #       uses: actions/checkout@v6
 
-      # Goreleaser
-      - name: Set up Go
-        uses: actions/setup-go@v6
+  #     # Goreleaser
+  #     - name: Set up Go
+  #       uses: actions/setup-go@v6
 
-      # Download all artifacts
-      - uses: actions/download-artifact@v8
-        with:
-          path: artifacts
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v7
-        with:
-          distribution: goreleaser
-          version: latest
-          # Run goreleaser and ignore non-committed files (downloaded artifacts)
-          args: release --skip=validate --verbose
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Update new version in krew-index
-        uses: rajatjindal/krew-release-bot@v0.0.51
+  #     # Download all artifacts
+  #     - uses: actions/download-artifact@v8
+  #       with:
+  #         path: artifacts
+  #     - name: Run GoReleaser
+  #       uses: goreleaser/goreleaser-action@v7
+  #       with:
+  #         distribution: goreleaser
+  #         version: latest
+  #         # Run goreleaser and ignore non-committed files (downloaded artifacts)
+  #         args: release --skip=validate --verbose
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #     - name: Update new version in krew-index
+  #       uses: rajatjindal/krew-release-bot@v0.0.51
