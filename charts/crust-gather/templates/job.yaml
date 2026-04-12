@@ -81,6 +81,9 @@ spec:
           args:
             - "collect"
             - "--reference={{ .Values.reference }}"
+            {{- if .Values.job.excludeCrustGatherResources }}
+            - "--exclude-labels={{ include "crust-gather.collectExcludeLabels" . }}"
+            {{- end }}
             {{- if .Values.ca_file }}
             - "--ca-file=/etc/crust-gather/ca/ca.pem"
             {{- end }}

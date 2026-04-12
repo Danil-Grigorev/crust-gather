@@ -92,6 +92,10 @@ job:
   ttlSecondsAfterFinished: 300
   command: []
   args: []
+  # Exclude chart-managed resources from collection by built-in Helm labels.
+  # This prevents crust-gather from collecting its own Job, ServiceAccount,
+  # and chart-generated Secrets such as OCI auth or CA material.
+  excludeCrustGatherResources: true
   hook:
     enabled: true
     events:

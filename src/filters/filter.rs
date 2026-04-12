@@ -15,6 +15,7 @@ use super::{
     kind::{KindExclude, KindInclude},
     name::{NameExclude, NameInclude},
     namespace::{NamespaceExclude, NamespaceInclude},
+    selector::{AnnotationGroup, LabelGroup, SelectorExclude, SelectorInclude},
 };
 
 pub trait Filter<R>: Sync + Send
@@ -67,6 +68,10 @@ pub enum FilterType {
     GroupExclude(Vec<GroupExclude>),
     NameInclude(Vec<NameInclude>),
     NameExclude(Vec<NameExclude>),
+    LabelSelectorInclude(Vec<SelectorInclude<LabelGroup>>),
+    LabelSelectorExclude(Vec<SelectorExclude<LabelGroup>>),
+    AnnotationSelectorInclude(Vec<SelectorInclude<AnnotationGroup>>),
+    AnnotationSelectorExclude(Vec<SelectorExclude<AnnotationGroup>>),
 }
 
 impl From<&Self> for FilterType {
@@ -99,10 +104,14 @@ impl<R: ResourceThreadSafe> Filter<R> for FilterList {
                 FilterType::KindExclude(e) => e.filter_object(obj, gvk),
                 FilterType::GroupExclude(e) => e.filter_object(obj, gvk),
                 FilterType::NameExclude(e) => e.filter_object(obj, gvk),
+                FilterType::LabelSelectorExclude(e) => e.filter_object(obj, gvk),
+                FilterType::AnnotationSelectorExclude(e) => e.filter_object(obj, gvk),
                 FilterType::NamespaceInclude(_) => None,
                 FilterType::KindInclude(_) => None,
                 FilterType::GroupInclude(_) => None,
                 FilterType::NameInclude(_) => None,
+                FilterType::LabelSelectorInclude(_) => None,
+                FilterType::AnnotationSelectorInclude(_) => None,
             })
             .peekable();
 
@@ -115,10 +124,14 @@ impl<R: ResourceThreadSafe> Filter<R> for FilterList {
             FilterType::KindExclude(_) => None,
             FilterType::GroupExclude(_) => None,
             FilterType::NameExclude(_) => None,
+            FilterType::LabelSelectorExclude(_) => None,
+            FilterType::AnnotationSelectorExclude(_) => None,
             FilterType::NamespaceInclude(i) => i.filter_object(obj, gvk),
             FilterType::KindInclude(i) => i.filter_object(obj, gvk),
             FilterType::GroupInclude(i) => i.filter_object(obj, gvk),
             FilterType::NameInclude(i) => i.filter_object(obj, gvk),
+            FilterType::LabelSelectorInclude(i) => i.filter_object(obj, gvk),
+            FilterType::AnnotationSelectorInclude(i) => i.filter_object(obj, gvk),
         });
 
         Some(includes.all(|allowed| allowed))

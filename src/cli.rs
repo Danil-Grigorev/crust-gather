@@ -26,6 +26,7 @@ use crate::{
         log::UserLog,
         name::{NameExclude, NameInclude},
         namespace::{NamespaceExclude, NamespaceInclude},
+        selector::{AnnotationGroup, LabelGroup, SelectorExclude, SelectorInclude},
     },
     gather::{
         config::{
@@ -858,6 +859,66 @@ pub struct Filters {
             action = ArgAction::Append )]
     #[serde(default)]
     pub exclude_name: Vec<NameExclude>,
+
+    /// Label selector to include in the resource collection.
+    ///
+    /// By default resources with any labels are collected.
+    /// Label selector supports Kubernetes selector expressions.
+    ///
+    /// --include-labels specified multiple times allows to include multiple label selectors, which are combined with OR operator.
+    ///
+    /// Example:
+    ///     --include-labels=app=frontend --include-labels='environment noin (prod,staging),tier!=web'
+    #[arg(long, value_name = "LABEL_SELECTOR",
+            value_parser = |arg: &str| -> anyhow::Result<SelectorInclude<LabelGroup>> {Ok(SelectorInclude::try_from(arg.to_string())?)},
+            action = ArgAction::Append )]
+    #[serde(default)]
+    pub include_labels: Vec<SelectorInclude<LabelGroup>>,
+
+    /// Label selector to exclude from the resource collection.
+    ///
+    /// By default resources with any labels are collected.
+    /// Label selector supports Kubernetes selector expressions.
+    ///
+    /// --exclude-labels specified multiple times allows to exclude multiple label selectors, which are combined with OR operator.
+    ///
+    /// Example:
+    ///     --exclude-labels=app=internal --exclude-labels='environment in (prod,staging),tier==web'
+    #[arg(long, value_name = "LABEL_SELECTOR",
+            value_parser = |arg: &str| -> anyhow::Result<SelectorExclude<LabelGroup>> {Ok(SelectorExclude::try_from(arg.to_string())?)},
+            action = ArgAction::Append )]
+    #[serde(default)]
+    pub exclude_labels: Vec<SelectorExclude<LabelGroup>>,
+
+    /// Annotation selector to include in the resource collection.
+    ///
+    /// By default resources with any annotations are collected.
+    /// Annotation selector supports Kubernetes selector expressions.
+    ///
+    /// --include-annotations specified multiple times allows to include multiple annotation selectors, which are combined with OR operator.
+    ///
+    /// Example:
+    ///     --include-annotations=app=frontend --include-annotations='environment noin (prod,staging),tier!=web'
+    #[arg(long, value_name = "ANNOTATION_SELECTOR",
+            value_parser = |arg: &str| -> anyhow::Result<SelectorInclude<AnnotationGroup>> {Ok(SelectorInclude::try_from(arg.to_string())?)},
+            action = ArgAction::Append )]
+    #[serde(default)]
+    pub include_annotations: Vec<SelectorInclude<AnnotationGroup>>,
+
+    /// Annotation selector to exclude from the resource collection.
+    ///
+    /// By default resources with any annotations are collected.
+    /// Annotation selector supports Kubernetes selector expressions.
+    ///
+    /// --exclude-annotations specified multiple times allows to exclude multiple annotation selectors, which are combined with OR operator.
+    ///
+    /// Example:
+    ///     --exclude-annotations=app=internal --exclude-annotations='environment in (prod,staging),tier==web'
+    #[arg(long, value_name = "ANNOTATION_SELECTOR",
+            value_parser = |arg: &str| -> anyhow::Result<SelectorExclude<AnnotationGroup>> {Ok(SelectorExclude::try_from(arg.to_string())?)},
+            action = ArgAction::Append )]
+    #[serde(default)]
+    pub exclude_annotations: Vec<SelectorExclude<AnnotationGroup>>,
 }
 
 impl TryFrom<String> for GatherCommands {
@@ -935,6 +996,10 @@ impl From<&Filters> for FilterList {
             filter.exclude_group.clone().into(),
             filter.include_name.clone().into(),
             filter.exclude_name.clone().into(),
+            filter.include_labels.clone().into(),
+            filter.exclude_labels.clone().into(),
+            filter.include_annotations.clone().into(),
+            filter.exclude_annotations.clone().into(),
         ];
 
         Self(data.iter().map(Clone::clone).collect())
@@ -947,9 +1012,9 @@ mod tests {
     use std::{collections::BTreeMap, env, io::Write};
 
     use k8s_openapi::api::core::v1::{ConfigMap, Namespace, Secret};
-
     use kube::core::{ObjectMeta, params::ListParams};
     use kube::{Api, api::PostParams};
+    use serde_json::Value;
     use tempfile::TempDir;
     use tokio::fs;
 
@@ -959,6 +1024,17 @@ mod tests {
         let mut dir = env::temp_dir();
         dir.push(xid::new().to_string());
         dir
+    }
+
+    #[test]
+    fn test_filter_list_matches_filters_field_count() {
+        let filters = Filters::default();
+        let serialized = serde_json::to_value(&filters).unwrap();
+        let Value::Object(fields) = serialized else {
+            panic!("filters should serialize as an object");
+        };
+
+        assert_eq!(FilterList::from(&filters).0.len(), fields.len());
     }
 
     #[tokio::test]

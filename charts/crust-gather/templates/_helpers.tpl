@@ -104,3 +104,10 @@ Return the name of the CA secret, if configured.
 {{- printf "%s-ca" (include "crust-gather.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 {{- end }}
+
+{{/*
+Label selector used to exclude chart-managed resources from collection.
+*/}}
+{{- define "crust-gather.collectExcludeLabels" -}}
+app.kubernetes.io/name={{ include "crust-gather.name" . }},app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/managed-by={{ .Release.Service }}
+{{- end }}
