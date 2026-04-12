@@ -512,11 +512,11 @@ mod tests {
     use tempfile::TempDir;
 
     use crate::{
-        filters::filter::FilterList,
+        filters::filter::{FilterList, Include},
         gather::writer::{Archive, Encoding},
     };
 
-    use crate::filters::namespace::NamespaceInclude;
+    use crate::filters::namespace::Namespace;
 
     use super::*;
 
@@ -589,7 +589,7 @@ mod tests {
         let client = test_env.client().expect("client");
         let tmp_dir = TempDir::new().expect("failed to create temp dir");
         let file_path = tmp_dir.path().join("crust-gather-test.zip");
-        let f = NamespaceInclude::try_from("default".to_string()).unwrap();
+        let f = Namespace::<Include>::try_from("default".to_string()).unwrap();
         let config = Config {
             client,
             filter: Arc::new(FilterGroup(vec![FilterList(vec![vec![f].into()])])),

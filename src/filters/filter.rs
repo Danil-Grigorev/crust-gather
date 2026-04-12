@@ -11,10 +11,11 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use crate::scanners::interface::ResourceThreadSafe;
 
 use super::{
-    group::{GroupExclude, GroupInclude},
-    kind::{KindExclude, KindInclude},
-    name::{NameExclude, NameInclude},
-    namespace::{NamespaceExclude, NamespaceInclude},
+    group::Group,
+    kind::Kind,
+    name::Name,
+    namespace::Namespace,
+    selector::{Annotations, Labels, Selector},
 };
 
 pub trait Filter<R>: Sync + Send
@@ -59,14 +60,18 @@ pub struct FilterGroup(pub Vec<FilterList>);
 
 #[derive(Clone, Debug)]
 pub enum FilterType {
-    NamespaceExclude(Vec<NamespaceExclude>),
-    NamespaceInclude(Vec<NamespaceInclude>),
-    KindInclude(Vec<KindInclude>),
-    KindExclude(Vec<KindExclude>),
-    GroupInclude(Vec<GroupInclude>),
-    GroupExclude(Vec<GroupExclude>),
-    NameInclude(Vec<NameInclude>),
-    NameExclude(Vec<NameExclude>),
+    NamespaceExclude(Vec<Namespace<Exclude>>),
+    NamespaceInclude(Vec<Namespace<Include>>),
+    KindInclude(Vec<Kind<Include>>),
+    KindExclude(Vec<Kind<Exclude>>),
+    GroupInclude(Vec<Group<Include>>),
+    GroupExclude(Vec<Group<Exclude>>),
+    NameInclude(Vec<Name<Include>>),
+    NameExclude(Vec<Name<Exclude>>),
+    LabelSelectorInclude(Vec<Selector<Include, Labels>>),
+    LabelSelectorExclude(Vec<Selector<Exclude, Labels>>),
+    AnnotationSelectorInclude(Vec<Selector<Include, Annotations>>),
+    AnnotationSelectorExclude(Vec<Selector<Exclude, Annotations>>),
 }
 
 impl From<&Self> for FilterType {
@@ -99,10 +104,14 @@ impl<R: ResourceThreadSafe> Filter<R> for FilterList {
                 FilterType::KindExclude(e) => e.filter_object(obj, gvk),
                 FilterType::GroupExclude(e) => e.filter_object(obj, gvk),
                 FilterType::NameExclude(e) => e.filter_object(obj, gvk),
+                FilterType::LabelSelectorExclude(e) => e.filter_object(obj, gvk),
+                FilterType::AnnotationSelectorExclude(e) => e.filter_object(obj, gvk),
                 FilterType::NamespaceInclude(_) => None,
                 FilterType::KindInclude(_) => None,
                 FilterType::GroupInclude(_) => None,
                 FilterType::NameInclude(_) => None,
+                FilterType::LabelSelectorInclude(_) => None,
+                FilterType::AnnotationSelectorInclude(_) => None,
             })
             .peekable();
 
@@ -115,10 +124,14 @@ impl<R: ResourceThreadSafe> Filter<R> for FilterList {
             FilterType::KindExclude(_) => None,
             FilterType::GroupExclude(_) => None,
             FilterType::NameExclude(_) => None,
+            FilterType::LabelSelectorExclude(_) => None,
+            FilterType::AnnotationSelectorExclude(_) => None,
             FilterType::NamespaceInclude(i) => i.filter_object(obj, gvk),
             FilterType::KindInclude(i) => i.filter_object(obj, gvk),
             FilterType::GroupInclude(i) => i.filter_object(obj, gvk),
             FilterType::NameInclude(i) => i.filter_object(obj, gvk),
+            FilterType::LabelSelectorInclude(i) => i.filter_object(obj, gvk),
+            FilterType::AnnotationSelectorInclude(i) => i.filter_object(obj, gvk),
         });
 
         Some(includes.all(|allowed| allowed))
@@ -174,13 +187,35 @@ impl TryFrom<String> for FilterRegex {
     }
 }
 
+#[derive(Clone, Default, Serialize, Deserialize, Debug, schemars::JsonSchema)]
+pub struct Include;
+
+#[derive(Clone, Default, Serialize, Deserialize, Debug, schemars::JsonSchema)]
+pub struct Exclude;
+
+pub trait Match: Debug {
+    fn matches(matches: bool) -> bool;
+}
+
+impl Match for Include {
+    fn matches(matches: bool) -> bool {
+        matches
+    }
+}
+
+impl Match for Exclude {
+    fn matches(matches: bool) -> bool {
+        !matches
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
     use k8s_openapi::api::core::v1::Pod;
     use kube::core::{ApiResource, DynamicObject, TypeMeta};
 
-    use crate::filters::namespace::{NamespaceExclude, NamespaceInclude};
+    use crate::filters::namespace::Namespace;
 
     use super::*;
 
@@ -195,9 +230,9 @@ mod tests {
         let pod_tm: TypeMeta = serde_yaml::from_str(POD).unwrap();
         assert_eq!(
             FilterList(vec![FilterType::NamespaceInclude(vec![
-                NamespaceInclude::try_from("test".to_string()).unwrap(),
-                NamespaceInclude::try_from("other".to_string()).unwrap(),
-                NamespaceInclude::try_from("test".to_string()).unwrap(),
+                Namespace::<Include>::try_from("test".to_string()).unwrap(),
+                Namespace::<Include>::try_from("other".to_string()).unwrap(),
+                Namespace::<Include>::try_from("test".to_string()).unwrap(),
             ]),])
             .filter_object(
                 &obj,
@@ -209,10 +244,10 @@ mod tests {
         assert_eq!(
             FilterList(vec![
                 FilterType::NamespaceInclude(vec![
-                    NamespaceInclude::try_from("test".to_string()).unwrap()
+                    Namespace::<Include>::try_from("test".to_string()).unwrap()
                 ]),
                 FilterType::NamespaceExclude(vec![
-                    NamespaceExclude::try_from("test".to_string()).unwrap()
+                    Namespace::<Exclude>::try_from("test".to_string()).unwrap()
                 ]),
             ])
             .filter_object(
@@ -225,10 +260,10 @@ mod tests {
         assert_eq!(
             FilterList(vec![
                 FilterType::NamespaceExclude(vec![
-                    NamespaceExclude::try_from("other".to_string()).unwrap()
+                    Namespace::<Exclude>::try_from("other".to_string()).unwrap()
                 ]),
                 FilterType::NamespaceExclude(vec![
-                    NamespaceExclude::try_from("test".to_string()).unwrap()
+                    Namespace::<Exclude>::try_from("test".to_string()).unwrap()
                 ]),
             ])
             .filter_object(

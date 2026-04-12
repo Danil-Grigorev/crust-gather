@@ -6,3 +6,9 @@ create-kind:
 load-kind-image:
     docker build -t {{image}} .
     kind load docker-image {{image}}
+
+clippy: fmt
+    cargo clippy --fix --allow-dirty --all-targets --all-features
+
+fmt:
+    cargo fmt --all

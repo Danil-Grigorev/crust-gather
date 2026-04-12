@@ -1,8 +1,9 @@
-use std::collections::BTreeMap;
+use std::{borrow::Cow, collections::BTreeMap, fmt::Display};
 
 use kube::core::{Expression, SelectorExt as _};
 use logos::{Lexer, Logos, Span};
-use serde::Deserialize;
+use rmcp::schemars::{self, Schema};
+use serde::{Deserialize, Serialize};
 
 use thiserror::Error;
 use tracing::instrument;
@@ -26,16 +27,14 @@ impl Selector {
     pub fn matches(&self, labels: &BTreeMap<String, String>) -> bool {
         match &self.label_selector {
             Some(selector) => Expressions::try_from(selector.clone())
-                .map(|expr| {
-                    expr.into_iter()
-                        .all(|ParsedExpression::Expression(e)| e.matches(labels))
-                })
+                .map(|expr| expr.matches(labels))
                 .unwrap_or_default(),
             None => true,
         }
     }
 }
 
+#[derive(Clone, Default, Serialize, Deserialize, Debug, schemars::JsonSchema)]
 pub struct Expressions(Vec<ParsedExpression>);
 
 impl IntoIterator for Expressions {
@@ -47,7 +46,22 @@ impl IntoIterator for Expressions {
     }
 }
 
-#[derive(Logos, Debug, PartialEq)]
+impl Expressions {
+    pub fn matches(&self, labels: &BTreeMap<String, String>) -> bool {
+        self.0
+            .iter()
+            .all(|ParsedExpression::Expression(expression)| expression.matches(labels))
+    }
+}
+
+impl Display for Expressions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let selectors: Vec<String> = self.0.iter().map(|e| e.to_string()).collect();
+        write!(f, "{}", selectors.join(","))
+    }
+}
+
+#[derive(Logos, Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 #[logos(skip r"[, \t\n\f]+")]
 pub enum ParsedExpression {
     #[regex(r"[-./\w]+\s+in\s+\([-.\w\s,]+\)", |lex| parse_set(lex.slice()))]
@@ -58,6 +72,24 @@ pub enum ParsedExpression {
     #[regex(r"[-./\w]+\s*==\s*[-.\w]+", |lex| parse_equality(lex.slice()))]
     #[regex(r"[-./\w]+\s*!=\s*[-.\w]+", |lex| parse_equality(lex.slice()))]
     Expression(Expression),
+}
+
+impl Display for ParsedExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ParsedExpression::Expression(e) => write!(f, "{}", e),
+        }
+    }
+}
+
+impl schemars::JsonSchema for ParsedExpression {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        Cow::Borrowed("ParsedExpression")
+    }
+
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> Schema {
+        String::json_schema(generator)
+    }
 }
 
 impl TryFrom<String> for Expressions {

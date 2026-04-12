@@ -81,14 +81,11 @@ spec:
           args:
             - "collect"
             - "--reference={{ .Values.reference }}"
+            {{- if .Values.job.excludeCrustGatherResources }}
+            - "--exclude-labels={{ include "crust-gather.collectExcludeLabels" . }}"
+            {{- end }}
             {{- if .Values.ca_file }}
             - "--ca-file=/etc/crust-gather/ca/ca.pem"
-            {{- end }}
-            {{- if .Values.token }}
-            - "--token=$(OCI_AUTH_TOKEN)"
-            {{- else if .Values.username }}
-            - "--username=$(OCI_AUTH_USERNAME)"
-            - "--password=$(OCI_AUTH_PASSWORD)"
             {{- end }}
           {{- end }}
           {{- with .Values.resources }}

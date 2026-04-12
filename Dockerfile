@@ -19,5 +19,5 @@ RUN cargo install --locked --features=${features} --path .
 FROM --platform=${BUILDPLATFORM} gcr.io/distroless/cc-debian12:nonroot
 WORKDIR /apps
 COPY --from=build /usr/src/crust-gather/target/release/kubectl-crust-gather /apps
-EXPOSE 8080
+EXPOSE 9095
 ENTRYPOINT ["/apps/kubectl-crust-gather"]

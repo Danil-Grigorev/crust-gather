@@ -20,12 +20,13 @@ use tracing::level_filters::LevelFilter;
 
 use crate::{
     filters::{
-        filter::{FilterGroup, FilterList, FilterType},
-        group::{GroupExclude, GroupInclude},
-        kind::{KindExclude, KindInclude},
+        filter::{Exclude, FilterGroup, FilterList, FilterType, Include},
+        group::Group,
+        kind::Kind,
         log::UserLog,
-        name::{NameExclude, NameInclude},
-        namespace::{NamespaceExclude, NamespaceInclude},
+        name::Name,
+        namespace::Namespace,
+        selector::{Annotations, Labels, Selector},
     },
     gather::{
         config::{
@@ -749,10 +750,10 @@ pub struct Filters {
     /// Example:
     ///     --include-namespace=default --include-namespace=kube-.*
     #[arg(long, value_name = "NAMESPACE",
-            value_parser = |arg: &str| -> anyhow::Result<NamespaceInclude> {Ok(NamespaceInclude::try_from(arg.to_string())?)},
+            value_parser = |arg: &str| -> anyhow::Result<Namespace<Include>> {Ok(Namespace::<Include>::try_from(arg.to_string())?)},
             action = ArgAction::Append )]
     #[serde(default)]
-    pub include_namespace: Vec<NamespaceInclude>,
+    pub include_namespace: Vec<Namespace<Include>>,
 
     /// Namespace to exclude from the resource collection.
     ///
@@ -764,10 +765,10 @@ pub struct Filters {
     /// Example:
     ///     --exclude-namespace=default --exclude-namespace=kube-.*
     #[arg(long, value_name = "NAMESPACE",
-            value_parser = |arg: &str| -> anyhow::Result<NamespaceExclude> {Ok(NamespaceExclude::try_from(arg.to_string())?)},
+            value_parser = |arg: &str| -> anyhow::Result<Namespace<Exclude>> {Ok(Namespace::<Exclude>::try_from(arg.to_string())?)},
             action = ArgAction::Append )]
     #[serde(default)]
-    pub exclude_namespace: Vec<NamespaceExclude>,
+    pub exclude_namespace: Vec<Namespace<Exclude>>,
 
     /// Resource kind to include in the resource collection.
     ///
@@ -779,10 +780,10 @@ pub struct Filters {
     /// Example:
     ///     --include-kind=Pod --include-kind=Deployment|ReplicaSet
     #[arg(long, value_name = "KIND",
-            value_parser = |arg: &str| -> anyhow::Result<KindInclude> {Ok(KindInclude::try_from(arg.to_string())?)},
+            value_parser = |arg: &str| -> anyhow::Result<Kind<Include>> {Ok(Kind::<Include>::try_from(arg.to_string())?)},
             action = ArgAction::Append )]
     #[serde(default)]
-    pub include_kind: Vec<KindInclude>,
+    pub include_kind: Vec<Kind<Include>>,
 
     /// Resource kind to exclude from the resource collection.
     ///
@@ -794,10 +795,10 @@ pub struct Filters {
     /// Example:
     ///     --exclude-kind=Pod --exclude-kind=Deployment|ReplicaSet
     #[arg(long, value_name = "KIND",
-            value_parser = |arg: &str| -> anyhow::Result<KindExclude> {Ok(KindExclude::try_from(arg.to_string())?)},
+            value_parser = |arg: &str| -> anyhow::Result<Kind<Exclude>> {Ok(Kind::<Exclude>::try_from(arg.to_string())?)},
             action = ArgAction::Append )]
     #[serde(default)]
-    pub exclude_kind: Vec<KindExclude>,
+    pub exclude_kind: Vec<Kind<Exclude>>,
 
     /// API group/kind to include in the resource collection.
     ///
@@ -811,10 +812,10 @@ pub struct Filters {
     ///     --include-group=/Node
     ///     --include-group=apps/Deployment|ReplicaSet
     #[arg(long, value_name = "GROUP_KIND", verbatim_doc_comment,
-            value_parser = |arg: &str| -> anyhow::Result<GroupInclude> {Ok(GroupInclude::try_from(arg.to_string())?)},
+            value_parser = |arg: &str| -> anyhow::Result<Group<Include>> {Ok(Group::<Include>::try_from(arg.to_string())?)},
             action = ArgAction::Append )]
     #[serde(default)]
-    pub include_group: Vec<GroupInclude>,
+    pub include_group: Vec<Group<Include>>,
 
     /// API groups/kind to exclude from the resource collection.
     ///
@@ -828,10 +829,10 @@ pub struct Filters {
     ///     --exclude-group=/Node
     ///     --exclude-group=apps/Deployment|ReplicaSet
     #[arg(long, value_name = "GROUP_KIND", verbatim_doc_comment,
-            value_parser = |arg: &str| -> anyhow::Result<GroupExclude> {Ok(GroupExclude::try_from(arg.to_string())?)},
+            value_parser = |arg: &str| -> anyhow::Result<Group<Exclude>> {Ok(Group::<Exclude>::try_from(arg.to_string())?)},
             action = ArgAction::Append )]
     #[serde(default)]
-    pub exclude_group: Vec<GroupExclude>,
+    pub exclude_group: Vec<Group<Exclude>>,
 
     /// Resource name to include in the resource collection.
     ///
@@ -841,10 +842,10 @@ pub struct Filters {
     /// Example:
     ///     --include-name=my-pod --include-name=frontend-.*
     #[arg(long, value_name = "NAME",
-            value_parser = |arg: &str| -> anyhow::Result<NameInclude> {Ok(NameInclude::try_from(arg.to_string())?)},
+            value_parser = |arg: &str| -> anyhow::Result<Name<Include>> {Ok(Name::<Include>::try_from(arg.to_string())?)},
             action = ArgAction::Append )]
     #[serde(default)]
-    pub include_name: Vec<NameInclude>,
+    pub include_name: Vec<Name<Include>>,
 
     /// Resource name to exclude from the resource collection.
     ///
@@ -854,10 +855,70 @@ pub struct Filters {
     /// Example:
     ///     --exclude-name=my-secret --exclude-name=internal-.*
     #[arg(long, value_name = "NAME",
-            value_parser = |arg: &str| -> anyhow::Result<NameExclude> {Ok(NameExclude::try_from(arg.to_string())?)},
+            value_parser = |arg: &str| -> anyhow::Result<Name<Exclude>> {Ok(Name::<Exclude>::try_from(arg.to_string())?)},
             action = ArgAction::Append )]
     #[serde(default)]
-    pub exclude_name: Vec<NameExclude>,
+    pub exclude_name: Vec<Name<Exclude>>,
+
+    /// Label selector to include in the resource collection.
+    ///
+    /// By default resources with any labels are collected.
+    /// Label selector supports Kubernetes selector expressions.
+    ///
+    /// --include-labels specified multiple times allows to include multiple label selectors, which are combined with OR operator.
+    ///
+    /// Example:
+    ///     --include-labels=app=frontend --include-labels='environment notin (prod,staging),tier!=web'
+    #[arg(long, value_name = "LABEL_SELECTOR",
+            value_parser = |arg: &str| -> anyhow::Result<Selector<Include, Labels>> {Ok(Selector::<Include, Labels>::try_from(arg.to_string())?)},
+            action = ArgAction::Append )]
+    #[serde(default)]
+    pub include_labels: Vec<Selector<Include, Labels>>,
+
+    /// Label selector to exclude from the resource collection.
+    ///
+    /// By default resources with any labels are collected.
+    /// Label selector supports Kubernetes selector expressions.
+    ///
+    /// --exclude-labels specified multiple times allows to exclude multiple label selectors, which are combined with OR operator.
+    ///
+    /// Example:
+    ///     --exclude-labels=app=internal --exclude-labels='environment in (prod,staging),tier==web'
+    #[arg(long, value_name = "LABEL_SELECTOR",
+            value_parser = |arg: &str| -> anyhow::Result<Selector<Exclude, Labels>> {Ok(Selector::<Exclude, Labels>::try_from(arg.to_string())?)},
+            action = ArgAction::Append )]
+    #[serde(default)]
+    pub exclude_labels: Vec<Selector<Exclude, Labels>>,
+
+    /// Annotation selector to include in the resource collection.
+    ///
+    /// By default resources with any annotations are collected.
+    /// Annotation selector supports Kubernetes selector expressions.
+    ///
+    /// --include-annotations specified multiple times allows to include multiple annotation selectors, which are combined with OR operator.
+    ///
+    /// Example:
+    ///     --include-annotations=app=frontend --include-annotations='environment notin (prod,staging),tier!=web'
+    #[arg(long, value_name = "ANNOTATION_SELECTOR",
+            value_parser = |arg: &str| -> anyhow::Result<Selector<Include, Annotations>> {Ok(Selector::<Include, Annotations>::try_from(arg.to_string())?)},
+            action = ArgAction::Append )]
+    #[serde(default)]
+    pub include_annotations: Vec<Selector<Include, Annotations>>,
+
+    /// Annotation selector to exclude from the resource collection.
+    ///
+    /// By default resources with any annotations are collected.
+    /// Annotation selector supports Kubernetes selector expressions.
+    ///
+    /// --exclude-annotations specified multiple times allows to exclude multiple annotation selectors, which are combined with OR operator.
+    ///
+    /// Example:
+    ///     --exclude-annotations=app=internal --exclude-annotations='environment in (prod,staging),tier==web'
+    #[arg(long, value_name = "ANNOTATION_SELECTOR",
+            value_parser = |arg: &str| -> anyhow::Result<Selector<Exclude, Annotations>> {Ok(Selector::<Exclude, Annotations>::try_from(arg.to_string())?)},
+            action = ArgAction::Append )]
+    #[serde(default)]
+    pub exclude_annotations: Vec<Selector<Exclude, Annotations>>,
 }
 
 impl TryFrom<String> for GatherCommands {
@@ -935,6 +996,10 @@ impl From<&Filters> for FilterList {
             filter.exclude_group.clone().into(),
             filter.include_name.clone().into(),
             filter.exclude_name.clone().into(),
+            filter.include_labels.clone().into(),
+            filter.exclude_labels.clone().into(),
+            filter.include_annotations.clone().into(),
+            filter.exclude_annotations.clone().into(),
         ];
 
         Self(data.iter().map(Clone::clone).collect())
@@ -947,9 +1012,9 @@ mod tests {
     use std::{collections::BTreeMap, env, io::Write};
 
     use k8s_openapi::api::core::v1::{ConfigMap, Namespace, Secret};
-
     use kube::core::{ObjectMeta, params::ListParams};
     use kube::{Api, api::PostParams};
+    use serde_json::Value;
     use tempfile::TempDir;
     use tokio::fs;
 
@@ -959,6 +1024,17 @@ mod tests {
         let mut dir = env::temp_dir();
         dir.push(xid::new().to_string());
         dir
+    }
+
+    #[test]
+    fn test_filter_list_matches_filters_field_count() {
+        let filters = Filters::default();
+        let serialized = serde_json::to_value(&filters).unwrap();
+        let Value::Object(fields) = serialized else {
+            panic!("filters should serialize as an object");
+        };
+
+        assert_eq!(FilterList::from(&filters).0.len(), fields.len());
     }
 
     #[tokio::test]

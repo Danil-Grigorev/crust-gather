@@ -88,11 +88,12 @@ mod test {
     use tempfile::TempDir;
     use tokio::time::timeout;
 
+    use crate::filters::filter::Include;
     use crate::gather::config::GatherMode;
     use crate::{
         filters::{
             filter::{FilterGroup, FilterList},
-            namespace::NamespaceInclude,
+            namespace::Namespace,
         },
         gather::{
             config::Config,
@@ -116,7 +117,7 @@ mod test {
             .create()
             .await
             .expect("cluster");
-        let filter = NamespaceInclude::try_from("default".to_string()).unwrap();
+        let filter = Namespace::<Include>::try_from("default".to_string()).unwrap();
 
         let api: Api<DynamicObject> = Api::default_namespaced_with(
             test_env.client().expect("client"),
