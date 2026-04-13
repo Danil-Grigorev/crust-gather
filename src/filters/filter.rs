@@ -96,46 +96,36 @@ impl<R: ResourceThreadSafe> Filter<R> for FilterGroup {
 
 impl<R: ResourceThreadSafe> Filter<R> for FilterList {
     fn filter_object(&self, obj: &R, gvk: &GroupVersionKind) -> Option<bool> {
-        let mut excludes = self
-            .0
+        self.0
             .iter()
             .filter_map(|f| match f {
-                FilterType::NamespaceExclude(e) => e.filter_object(obj, gvk),
-                FilterType::KindExclude(e) => e.filter_object(obj, gvk),
-                FilterType::GroupExclude(e) => e.filter_object(obj, gvk),
-                FilterType::NameExclude(e) => e.filter_object(obj, gvk),
-                FilterType::LabelSelectorExclude(e) => e.filter_object(obj, gvk),
-                FilterType::AnnotationSelectorExclude(e) => e.filter_object(obj, gvk),
-                FilterType::NamespaceInclude(_) => None,
-                FilterType::KindInclude(_) => None,
-                FilterType::GroupInclude(_) => None,
-                FilterType::NameInclude(_) => None,
-                FilterType::LabelSelectorInclude(_) => None,
-                FilterType::AnnotationSelectorInclude(_) => None,
+                FilterType::NamespaceExclude(e) => Some(eval_exclude(e, obj, gvk)),
+                FilterType::KindExclude(e) => Some(eval_exclude(e, obj, gvk)),
+                FilterType::GroupExclude(e) => Some(eval_exclude(e, obj, gvk)),
+                FilterType::NameExclude(e) => Some(eval_exclude(e, obj, gvk)),
+                FilterType::LabelSelectorExclude(e) => Some(eval_exclude(e, obj, gvk)),
+                FilterType::AnnotationSelectorExclude(e) => Some(eval_exclude(e, obj, gvk)),
+                FilterType::NamespaceInclude(i) => i.filter_object(obj, gvk),
+                FilterType::KindInclude(i) => i.filter_object(obj, gvk),
+                FilterType::GroupInclude(i) => i.filter_object(obj, gvk),
+                FilterType::NameInclude(i) => i.filter_object(obj, gvk),
+                FilterType::LabelSelectorInclude(i) => i.filter_object(obj, gvk),
+                FilterType::AnnotationSelectorInclude(i) => i.filter_object(obj, gvk),
             })
-            .peekable();
-
-        if excludes.peek().is_some() && excludes.filter(|&e| !e).any(|allowed| !allowed) {
-            return Some(false);
-        }
-
-        let mut includes = self.0.iter().filter_map(|f| match f {
-            FilterType::NamespaceExclude(_) => None,
-            FilterType::KindExclude(_) => None,
-            FilterType::GroupExclude(_) => None,
-            FilterType::NameExclude(_) => None,
-            FilterType::LabelSelectorExclude(_) => None,
-            FilterType::AnnotationSelectorExclude(_) => None,
-            FilterType::NamespaceInclude(i) => i.filter_object(obj, gvk),
-            FilterType::KindInclude(i) => i.filter_object(obj, gvk),
-            FilterType::GroupInclude(i) => i.filter_object(obj, gvk),
-            FilterType::NameInclude(i) => i.filter_object(obj, gvk),
-            FilterType::LabelSelectorInclude(i) => i.filter_object(obj, gvk),
-            FilterType::AnnotationSelectorInclude(i) => i.filter_object(obj, gvk),
-        });
-
-        Some(includes.all(|allowed| allowed))
+            .all(|allowed| allowed)
+            .into()
     }
+}
+
+fn eval_exclude<R, F>(filters: &Vec<F>, obj: &R, gvk: &GroupVersionKind) -> bool
+where
+    F: Filter<R>,
+    R: ResourceThreadSafe,
+{
+    filters
+        .iter()
+        .filter_map(|f| f.filter_object(obj, gvk))
+        .all(|allowed| allowed)
 }
 
 #[derive(Clone, Deserialize, Debug)]
@@ -215,7 +205,10 @@ mod tests {
     use k8s_openapi::api::core::v1::Pod;
     use kube::core::{ApiResource, DynamicObject, TypeMeta};
 
-    use crate::filters::namespace::Namespace;
+    use crate::filters::{
+        namespace::Namespace,
+        selector::{Labels, Selector},
+    };
 
     use super::*;
 
@@ -280,6 +273,42 @@ mod tests {
             ),
             Some(true)
         );
+    }
+
+    #[test]
+    fn repeated_excludes_are_combined_with_or() {
+        let pod_tm: TypeMeta = serde_yaml::from_str(POD).unwrap();
+
+        let mut app_obj =
+            DynamicObject::new("app", &ApiResource::erase::<Pod>(&())).within("default");
+        app_obj.metadata.labels = Some(
+            [(
+                "app.kubernetes.io/name".to_string(),
+                "crust-gather".to_string(),
+            )]
+            .into_iter()
+            .collect(),
+        );
+
+        let mut name_obj =
+            DynamicObject::new("name", &ApiResource::erase::<Pod>(&())).within("default");
+        name_obj.metadata.labels = Some(
+            [("name".to_string(), "crust-gather".to_string())]
+                .into_iter()
+                .collect(),
+        );
+
+        let filter = FilterList(vec![FilterType::LabelSelectorExclude(vec![
+            Selector::<Exclude, Labels>::try_from(
+                "app.kubernetes.io/name=crust-gather".to_string(),
+            )
+            .unwrap(),
+            Selector::<Exclude, Labels>::try_from("name=crust-gather".to_string()).unwrap(),
+        ])]);
+
+        let gvk = GroupVersionKind::try_from(pod_tm.clone()).expect("parse GVK");
+        assert_eq!(filter.filter_object(&app_obj, &gvk), Some(false));
+        assert_eq!(filter.filter_object(&name_obj, &gvk), Some(false));
     }
 
     #[test]

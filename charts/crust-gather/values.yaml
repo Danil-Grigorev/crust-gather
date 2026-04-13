@@ -94,7 +94,8 @@ job:
   args: []
   # Exclude chart-managed resources from collection by built-in Helm labels.
   # This prevents crust-gather from collecting its own Job, ServiceAccount,
-  # and chart-generated Secrets such as OCI auth or CA material.
+  # chart-generated Secrets such as OCI auth or CA material, and Helm release
+  # Secrets that may contain rendered credentials in their stored manifests.
   excludeCrustGatherResources: true
   hook:
     enabled: true

@@ -1,4 +1,4 @@
-image := "ghcr.io/crust-gather/crust-gather:latest"
+image := "ghcr.io/crust-gather/crust-gather:1.0.0"
 
 create-kind:
     kind create cluster

@@ -111,3 +111,11 @@ Label selector used to exclude chart-managed resources from collection.
 {{- define "crust-gather.collectExcludeLabels" -}}
 app.kubernetes.io/name={{ include "crust-gather.name" . }},app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/managed-by={{ .Release.Service }}
 {{- end }}
+
+{{/*
+Label selector used to exclude Helm release secrets from collection.
+These secrets are managed by Helm itself and may contain rendered chart values.
+*/}}
+{{- define "crust-gather.collectExcludeHelmReleaseSecretLabels" -}}
+name={{ .Release.Name }},owner=helm
+{{- end }}
