@@ -44,6 +44,26 @@ helm upgrade --install crust-gather oci://ghcr.io/crust-gather/crust-gather \
   --set reference=ttl.sh/my-cluster-snapshot:1h
 ```
 
+After helm install completes, the OCI archve can be served directly from a docker container:
+
+```bash
+docker run --rm -i -p 9095:9095 \
+  -v "${KUBECONFIG:-$HOME/.kube/config}:/home/nonroot/.kube/config:rw" \
+  ghcr.io/danil-grigorev/crust-gather serve -r ttl.sh/my-cluster-snapshot:1h &
+```
+
+After which any `kubectl` command will access the OCI archive directly, until serving is stopped
+
+```bash
+> kubectl get ns
+NAME                 STATUS   AGE
+local-path-storage   Active   8h
+kube-public          Active   8h
+kube-node-lease      Active   8h
+kube-system          Active   8h
+default              Active   8h
+```
+
 ### Artifact serving
 
 One of the QoL features `crust-gather` provides is an ability to collect cluster snapshots during CI workflow run and serve the content like a k8s cluster after the originating cluster is removed. It can serve any number of clusters simulaniously, each cluster stored under separate context.
@@ -153,12 +173,11 @@ Example stdio MCP configuration that runs `crust-gather` from Docker and publish
         "-i",
         "-p",
         "9095:9095",
+        "-v",
+        "/tmp:/tmp:rw",
         "ghcr.io/crust-gather/crust-gather",
         "mcp"
       ],
-      "env": {
-        "RUST_LOG": "info"
-      }
     }
   }
 }
@@ -167,14 +186,13 @@ Example stdio MCP configuration that runs `crust-gather` from Docker and publish
 Equivalent Codex CLI command:
 
 ```bash
-codex mcp add crust-gather --env RUST_LOG=info -- \
-  docker run --rm -i -p 9095:9095 ghcr.io/crust-gather/crust-gather mcp
+codex mcp add crust-gather -- docker run --rm -i -p 9095:9095 -v "/tmp:/tmp:rw" ghcr.io/crust-gather/crust-gather mcp
 ```
 
-Simple local-binary example:
+Simpler local-binary example:
 
 ```bash
-codex mcp add crust-gather-local --env RUST_LOG=info -- crust-gather mcp
+codex mcp add crust-gather -- crust-gather mcp
 ```
 
 When using the local-binary setup, pass an explicit host-reachable socket such as `0.0.0.0:9095` to the `serve_archive` or `serve_oci` MCP tool if you want returned kubeconfigs to work outside the MCP server process.
@@ -215,11 +233,7 @@ The `{server}` path segment is the archive or OCI-backed context name exposed by
 ## Testing
 
 To run tests locally:
-```bash
-make test
-```
 
-Alternatively you can pass `GOOS` or `GOARCH` directly to the make task:
 ```bash
-GOOS=linux GOARCH=amd64 make test
+cargo t
 ```

@@ -1,35 +1,17 @@
 crust-gather installed a one-shot Job:
   {{ include "crust-gather.fullname" . }}
 
-On install it only runs `crust-gather` in Kubernetes, which is typically used here to collect a snapshot and push it to OCI.
+This chart runs `crust-gather collect` as a one-shot Job. With `reference` set, the
+Job collects the cluster snapshot and pushes it to the OCI reference below:
 
-The chart will render `collect --reference=...` automatically when `reference` is set.
-When `ca_file` is also set, the chart will create a Secret, mount it into the Job,
-and add `--ca-file=/etc/crust-gather/ca/ca.pem` to that generated command.
+  {{ .Values.reference | default "<set .Values.reference>" }}
 
-Example install:
-  helm install {{ .Release.Name }} {{ .Chart.Name }} \
-    --namespace {{ .Release.Namespace }} \
-    --set reference=ttl.sh/my-cluster-snapshot:1h
+After the Job completes and the archive is available in the registry, serve it locally:
 
-Example install with chart-managed auth secret:
-  helm install {{ .Release.Name }} {{ .Chart.Name }} \
-    --namespace {{ .Release.Namespace }} \
-    --set reference=ttl.sh/my-cluster-snapshot:1h \
-    --set username=my-user \
-    --set password=my-password
+  docker run --rm -i -p 9095:9095 \
+    -v "${KUBECONFIG:-$HOME/.kube/config}:/home/nonroot/.kube/config:rw" \
+    {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }} serve -r {{ .Values.reference | default "ttl.sh/my-cluster-snapshot:1h" }}{{ if .Values.token }} --token {{ .Values.token }}{{ end }}{{ if .Values.username }} --username {{ .Values.username }} --password {{ .Values.password }}{{ end }}{{ if .Values.ca_file }} --ca-file {{ .Values.ca_file }}{{ end }} &
 
-Example install with token auth:
-  helm install {{ .Release.Name }} {{ .Chart.Name }} \
-    --namespace {{ .Release.Namespace }} \
-    --set reference=ttl.sh/my-cluster-snapshot:1h \
-    --set token=token-value
+Then point `kubectl` at the served snapshot:
 
-Example install with custom CA path:
-  helm install {{ .Release.Name }} {{ .Chart.Name }} \
-    --namespace {{ .Release.Namespace }} \
-    --set reference=ttl.sh/my-cluster-snapshot:1h \
-    --set-file ca_file=/path/to/registry-ca.pem
-
-If your registry needs other custom TLS settings, continue to use `job.args` or `collect`
-for flags such as `--insecure`.
+  kubectl get ns
