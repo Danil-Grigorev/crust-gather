@@ -185,7 +185,7 @@ mod test {
             .create()
             .await
             .expect("cluster");
-        let filter = Namespace::<Include>::try_from("default".to_string()).unwrap();
+        let filter = Namespace::<Include>::try_from("default").unwrap();
 
         let pod_api: Api<Pod> = Api::default_namespaced(test_env.client().expect("client"));
 
@@ -231,7 +231,7 @@ mod test {
                 secrets: Default::default(),
                 mode: GatherMode::Collect,
                 additional_logs: Default::default(),
-                duration: "1m".to_string().try_into().unwrap(),
+                duration: "1m".try_into().unwrap(),
                 systemd_units: Default::default(),
                 debug_pod: Default::default(),
             }),

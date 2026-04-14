@@ -82,12 +82,12 @@ impl TryFrom<SecretsFile> for Secrets {
     }
 }
 
-impl TryFrom<String> for SecretsFile {
+impl TryFrom<&str> for SecretsFile {
     type Error = anyhow::Error;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        match File::open(value.as_str()) {
-            Ok(_) => Ok(Self(Path::new(value.as_str()).into())),
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match File::open(value) {
+            Ok(_) => Ok(Self(Path::new(value).into())),
             Err(e) => Err(e.into()),
         }
     }
@@ -208,14 +208,14 @@ impl<'de> Deserialize<'de> for KubeconfigFile {
         D: serde::Deserializer<'de>,
     {
         let path = String::deserialize(deserializer)?;
-        path.try_into().map_err(serde::de::Error::custom)
+        path.as_str().try_into().map_err(serde::de::Error::custom)
     }
 }
 
-impl TryFrom<String> for KubeconfigFile {
+impl TryFrom<&str> for KubeconfigFile {
     type Error = anyhow::Error;
 
-    fn try_from(s: String) -> Result<Self, Self::Error> {
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
         Ok(Self(serde_yaml::from_reader(File::open(s)?)?))
     }
 }
@@ -318,11 +318,11 @@ impl SecretSearch {
 #[derive(Clone, Deserialize, Copy)]
 pub struct RunDuration(DurationString);
 
-impl TryFrom<String> for RunDuration {
+impl TryFrom<&str> for RunDuration {
     type Error = anyhow::Error;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        Ok(Self(match DurationString::try_from(value) {
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Ok(Self(match DurationString::try_from(value.to_string()) {
             Ok(duration) => duration,
             Err(error) => bail!(error),
         }))
@@ -589,7 +589,7 @@ mod tests {
         let client = test_env.client().expect("client");
         let tmp_dir = TempDir::new().expect("failed to create temp dir");
         let file_path = tmp_dir.path().join("crust-gather-test.zip");
-        let f = Namespace::<Include>::try_from("default".to_string()).unwrap();
+        let f = Namespace::<Include>::try_from("default").unwrap();
         let config = Config {
             client,
             filter: Arc::new(FilterGroup(vec![FilterList(vec![vec![f].into()])])),
@@ -599,7 +599,7 @@ mod tests {
                 .into(),
             secrets: Default::default(),
             mode: GatherMode::Collect,
-            duration: "10s".to_string().try_into().unwrap(),
+            duration: "10s".try_into().unwrap(),
             additional_logs: Default::default(),
             systemd_units: Default::default(),
             debug_pod: Default::default(),
@@ -628,7 +628,7 @@ mod tests {
                 .await
                 .expect("failed to create builder")
                 .into(),
-            duration: "1m".to_string().try_into().unwrap(),
+            duration: "1m".try_into().unwrap(),
             mode: GatherMode::Collect,
             secrets: Default::default(),
             additional_logs: Default::default(),
@@ -657,7 +657,7 @@ mod tests {
                 .await
                 .expect("failed to create builder")
                 .into(),
-            duration: "1m".to_string().try_into().unwrap(),
+            duration: "1m".try_into().unwrap(),
             mode: GatherMode::Collect,
             secrets: Default::default(),
             additional_logs: Default::default(),

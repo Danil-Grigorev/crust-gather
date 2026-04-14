@@ -42,6 +42,22 @@ where
     }
 }
 
+impl<G, M> TryFrom<&str> for Selector<M, G>
+where
+    G: SelectorSource + Send + Sync,
+    M: Match + Send + Sync,
+{
+    type Error = anyhow::Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Ok(Self {
+            selector: value.try_into()?,
+            group: PhantomData,
+            matcher: PhantomData,
+        })
+    }
+}
+
 impl<G, M> TryFrom<String> for Selector<M, G>
 where
     G: SelectorSource + Send + Sync,
@@ -50,11 +66,7 @@ where
     type Error = anyhow::Error;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        Ok(Self {
-            selector: value.try_into()?,
-            group: PhantomData,
-            matcher: PhantomData,
-        })
+        Self::try_from(value.as_str())
     }
 }
 
@@ -145,7 +157,7 @@ mod tests {
 
     #[test]
     fn test_label_selector_include_filter() {
-        let filter = Selector::<Include, Labels>::try_from("app=web".to_string()).unwrap();
+        let filter = Selector::<Include, Labels>::try_from("app=web").unwrap();
         let obj = pod_with_metadata(&[("app", "web")], &[]);
 
         assert_eq!(filter.filter_object(&obj, &pod_gvk()), Some(true));
@@ -153,7 +165,7 @@ mod tests {
 
     #[test]
     fn test_label_selector_exclude_filter() {
-        let filter = Selector::<Exclude, Labels>::try_from("app=web".to_string()).unwrap();
+        let filter = Selector::<Exclude, Labels>::try_from("app=web").unwrap();
         let obj = pod_with_metadata(&[("app", "web")], &[]);
 
         assert_eq!(filter.filter_object(&obj, &pod_gvk()), Some(false));
@@ -162,8 +174,7 @@ mod tests {
     #[test]
     fn test_annotation_selector_include_filter() {
         let filter =
-            Selector::<Include, Annotations>::try_from("team in (platform,infra)".to_string())
-                .unwrap();
+            Selector::<Include, Annotations>::try_from("team in (platform,infra)").unwrap();
         let obj = pod_with_metadata(&[], &[("team", "platform")]);
 
         assert_eq!(filter.filter_object(&obj, &pod_gvk()), Some(true));
@@ -172,8 +183,7 @@ mod tests {
     #[test]
     fn test_annotation_selector_exclude_filter() {
         let filter =
-            Selector::<Exclude, Annotations>::try_from("team in (platform,infra)".to_string())
-                .unwrap();
+            Selector::<Exclude, Annotations>::try_from("team in (platform,infra)").unwrap();
         let obj = pod_with_metadata(&[], &[("team", "platform")]);
 
         assert_eq!(filter.filter_object(&obj, &pod_gvk()), Some(false));

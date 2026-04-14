@@ -9,10 +9,10 @@ pub struct UserLog {
     pub command: String,
 }
 
-impl TryFrom<String> for UserLog {
+impl TryFrom<&str> for UserLog {
     type Error = anyhow::Error;
 
-    fn try_from(s: String) -> Result<Self, Self::Error> {
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
         let (name, command) = s.split_once(':').unwrap_or_default();
         if name.is_empty() && command.is_empty() {
             Err(anyhow!("Custom log should contain : delimiter"))?;
@@ -37,7 +37,7 @@ mod tests {
 
     #[test]
     fn try_from_parses_name_and_command() {
-        let log = UserLog::try_from("kubelet.log:journalctl -u kubelet".to_string()).unwrap();
+        let log = UserLog::try_from("kubelet.log:journalctl -u kubelet").unwrap();
 
         assert_eq!(log.name, "kubelet.log");
         assert_eq!(log.command, "journalctl -u kubelet");
@@ -45,18 +45,18 @@ mod tests {
 
     #[test]
     fn try_from_allows_empty_name_or_command_when_delimiter_present() {
-        let missing_name = UserLog::try_from(":echo test".to_string()).unwrap();
+        let missing_name = UserLog::try_from(":echo test").unwrap();
         assert_eq!(missing_name.name, "");
         assert_eq!(missing_name.command, "echo test");
 
-        let missing_command = UserLog::try_from("kubelet.log:".to_string()).unwrap();
+        let missing_command = UserLog::try_from("kubelet.log:").unwrap();
         assert_eq!(missing_command.name, "kubelet.log");
         assert_eq!(missing_command.command, "");
     }
 
     #[test]
     fn try_from_rejects_missing_delimiter() {
-        let error = UserLog::try_from("kubelet.log".to_string()).unwrap_err();
+        let error = UserLog::try_from("kubelet.log").unwrap_err();
 
         assert_eq!(error.to_string(), "Custom log should contain : delimiter");
     }

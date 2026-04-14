@@ -38,14 +38,22 @@ where
     }
 }
 
-impl<M: Match> TryFrom<String> for Kind<M> {
+impl<M: Match> TryFrom<&str> for Kind<M> {
     type Error = anyhow::Error;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
         Ok(Self {
             kind: value.try_into()?,
             matcher: std::marker::PhantomData,
         })
+    }
+}
+
+impl<M: Match> TryFrom<String> for Kind<M> {
+    type Error = anyhow::Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::try_from(value.as_str())
     }
 }
 
@@ -80,7 +88,7 @@ mod tests {
 
     #[test]
     fn test_kind_include_filter() {
-        let filter = Kind::<Include>::try_from(Pod::KIND.to_string()).expect("Parse KindInclude");
+        let filter = Kind::<Include>::try_from(Pod::KIND).expect("Parse KindInclude");
         let pod_tm: TypeMeta = serde_yaml::from_str(POD).unwrap();
         let deploy_tm: TypeMeta = serde_yaml::from_str(DEPLOY).unwrap();
         let obj: DynamicObject =
@@ -106,7 +114,7 @@ mod tests {
 
     #[test]
     fn test_from_string() {
-        let filter = Kind::<Include>::try_from("Pod".to_string()).expect("Parse KindInclude");
+        let filter = Kind::<Include>::try_from("Pod").expect("Parse KindInclude");
         assert_eq!(filter.kind.0.as_str(), "Pod");
     }
 
@@ -117,7 +125,7 @@ mod tests {
         let obj: DynamicObject =
             DynamicObject::new("test", &ApiResource::erase::<Pod>(&())).within("default");
 
-        let filter = Kind::<Exclude>::try_from("Pod".to_string()).expect("KindExclude");
+        let filter = Kind::<Exclude>::try_from("Pod").expect("KindExclude");
         assert_eq!(
             <Kind<Exclude> as Filter<DynamicObject>>::filter_object(
                 &filter,

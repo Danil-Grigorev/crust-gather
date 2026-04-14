@@ -51,10 +51,10 @@ where
     }
 }
 
-impl TryFrom<String> for GroupRegex {
+impl TryFrom<&str> for GroupRegex {
     type Error = anyhow::Error;
 
-    fn try_from(s: String) -> Result<Self, Self::Error> {
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
         let gksplit = s.splitn(2, '/').collect::<Vec<_>>();
         let (groups, kinds) = match *gksplit.as_slice() {
             ["", k] => ("^$", k), // empty group case
@@ -65,9 +65,17 @@ impl TryFrom<String> for GroupRegex {
         };
 
         Ok(Self {
-            group: groups.to_string().try_into()?,
-            kind: kinds.to_string().try_into()?,
+            group: groups.try_into()?,
+            kind: kinds.try_into()?,
         })
+    }
+}
+
+impl TryFrom<String> for GroupRegex {
+    type Error = anyhow::Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::try_from(value.as_str())
     }
 }
 
@@ -79,14 +87,22 @@ impl Display for GroupRegex {
     }
 }
 
-impl<M: Match> TryFrom<String> for Group<M> {
+impl<M: Match> TryFrom<&str> for Group<M> {
     type Error = anyhow::Error;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
         Ok(Self {
             group: value.try_into()?,
             matcher: std::marker::PhantomData,
         })
+    }
+}
+
+impl<M: Match> TryFrom<String> for Group<M> {
+    type Error = anyhow::Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::try_from(value.as_str())
     }
 }
 
@@ -124,8 +140,7 @@ mod tests {
 
     #[test]
     fn test_group_include_filter() {
-        let filter =
-            Group::<Include>::try_from("apps/(Deployment|ReplicaSet)".to_string()).unwrap();
+        let filter = Group::<Include>::try_from("apps/(Deployment|ReplicaSet)").unwrap();
 
         let pod_tm: TypeMeta = serde_yaml::from_str(POD).unwrap();
         let deploy_tm: TypeMeta = serde_yaml::from_str(DEPLOY).unwrap();
@@ -161,10 +176,10 @@ mod tests {
 
     #[test]
     fn test_from_string_list() {
-        let filter = Group::<Include>::try_from("/Pod".to_string()).unwrap();
+        let filter = Group::<Include>::try_from("/Pod").unwrap();
         assert_eq!(filter.group.to_string(), "<Group: ^$, Kind: Pod>");
 
-        let filter = Group::<Include>::try_from("apps".to_string()).unwrap();
+        let filter = Group::<Include>::try_from("apps").unwrap();
         assert_eq!(filter.group.to_string(), "<Group: apps, Kind: .*>");
     }
 
@@ -180,7 +195,7 @@ mod tests {
         let obj: DynamicObject =
             DynamicObject::new("test", &ApiResource::erase::<Pod>(&())).within("default");
 
-        let exclude = Group::<Exclude>::try_from(Pod::GROUP.to_string()).unwrap();
+        let exclude = Group::<Exclude>::try_from(Pod::GROUP).unwrap();
         assert_eq!(
             <Group<Exclude> as Filter<DynamicObject>>::filter_object(
                 &exclude,
@@ -201,13 +216,13 @@ mod tests {
 
     #[test]
     fn test_try_from_include() {
-        let filter = Group::<Include>::try_from("apps/Deployment|ReplicaSet".to_string()).unwrap();
+        let filter = Group::<Include>::try_from("apps/Deployment|ReplicaSet").unwrap();
         assert_eq!(
             filter.group.to_string(),
             "<Group: apps, Kind: Deployment|ReplicaSet>"
         );
 
-        let filter = Group::<Include>::try_from(String::new()).unwrap();
+        let filter = Group::<Include>::try_from("").unwrap();
         assert_eq!(filter.group.to_string(), "<Group: ^$, Kind: .*>");
     }
 }

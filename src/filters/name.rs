@@ -30,14 +30,22 @@ where
     }
 }
 
-impl<M: Match> TryFrom<String> for Name<M> {
+impl<M: Match> TryFrom<&str> for Name<M> {
     type Error = anyhow::Error;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
         Ok(Self {
             name: value.try_into()?,
             matcher: std::marker::PhantomData,
         })
+    }
+}
+
+impl<M: Match> TryFrom<String> for Name<M> {
+    type Error = anyhow::Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::try_from(value.as_str())
     }
 }
 
@@ -67,7 +75,7 @@ mod tests {
     #[test]
     fn test_name_include_filter() {
         let pod_tm: TypeMeta = serde_yaml::from_str(POD).unwrap();
-        let filter = Name::<Include>::try_from("test.*".to_string()).unwrap();
+        let filter = Name::<Include>::try_from("test.*").unwrap();
         let obj = DynamicObject::new("test-pod", &ApiResource::erase::<Pod>(&())).within("default");
         assert_eq!(
             filter.filter_object(
@@ -81,7 +89,7 @@ mod tests {
     #[test]
     fn test_name_exclude_filter() {
         let pod_tm: TypeMeta = serde_yaml::from_str(POD).unwrap();
-        let filter = Name::<Exclude>::try_from("secret.*".to_string()).unwrap();
+        let filter = Name::<Exclude>::try_from("secret.*").unwrap();
         let obj =
             DynamicObject::new("public-pod", &ApiResource::erase::<Pod>(&())).within("default");
         assert_eq!(

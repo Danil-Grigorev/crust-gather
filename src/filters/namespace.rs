@@ -25,14 +25,22 @@ pub struct Namespace<M: Match> {
     matcher: PhantomData<M>,
 }
 
-impl<M: Match> TryFrom<String> for Namespace<M> {
+impl<M: Match> TryFrom<&str> for Namespace<M> {
     type Error = anyhow::Error;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
         Ok(Self {
             namespace: value.try_into()?,
             matcher: PhantomData,
         })
+    }
+}
+
+impl<M: Match> TryFrom<String> for Namespace<M> {
+    type Error = anyhow::Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::try_from(value.as_str())
     }
 }
 
@@ -85,7 +93,7 @@ mod tests {
     fn test_include_namespace_filter() {
         let pod_tm: TypeMeta = serde_yaml::from_str(POD).unwrap();
 
-        let filter = Namespace::<Include>::try_from("default".to_string()).unwrap();
+        let filter = Namespace::<Include>::try_from("default").unwrap();
 
         let obj = DynamicObject::new("test", &ApiResource::erase::<Pod>(&())).within("default");
         assert_eq!(
@@ -96,7 +104,7 @@ mod tests {
             Some(true)
         );
 
-        let filter = Namespace::<Include>::try_from("default".to_string()).unwrap();
+        let filter = Namespace::<Include>::try_from("default").unwrap();
 
         let obj = DynamicObject::new("other", &ApiResource::erase::<Pod>(&())).within("other");
         assert_eq!(
@@ -120,7 +128,7 @@ mod tests {
     #[test]
     fn test_exclude_namespace() {
         let pod_tm: TypeMeta = serde_yaml::from_str(POD).unwrap();
-        let filter = Namespace::<Exclude>::try_from("default".to_string()).unwrap();
+        let filter = Namespace::<Exclude>::try_from("default").unwrap();
 
         let obj = DynamicObject::new("test", &ApiResource::erase::<Pod>(&())).within("default");
         assert_eq!(
@@ -131,7 +139,7 @@ mod tests {
             Some(false)
         );
 
-        let filter = Namespace::<Exclude>::try_from("default".to_string()).unwrap();
+        let filter = Namespace::<Exclude>::try_from("default").unwrap();
 
         let obj = DynamicObject::new("test", &ApiResource::erase::<Pod>(&())).within("other");
         assert_eq!(
@@ -154,13 +162,13 @@ mod tests {
 
     #[test]
     fn test_include_from_string() {
-        let namespaces = Namespace::<Include>::try_from("default".to_string()).unwrap();
+        let namespaces = Namespace::<Include>::try_from("default").unwrap();
         assert_eq!(namespaces.namespace.0.as_str(), "default");
     }
 
     #[test]
     fn test_exclude_from_string() {
-        let namespaces = Namespace::<Exclude>::try_from("default".to_string()).unwrap();
+        let namespaces = Namespace::<Exclude>::try_from("default").unwrap();
         assert_eq!(namespaces.namespace.0.as_str(), "default");
     }
 }

@@ -169,11 +169,19 @@ impl Display for FilterRegex {
     }
 }
 
+impl TryFrom<&str> for FilterRegex {
+    type Error = anyhow::Error;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        Ok(Self(Regex::new(s)?))
+    }
+}
+
 impl TryFrom<String> for FilterRegex {
     type Error = anyhow::Error;
 
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        Ok(Self(Regex::new(s.as_str())?))
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::try_from(value.as_str())
     }
 }
 
@@ -223,9 +231,9 @@ mod tests {
         let pod_tm: TypeMeta = serde_yaml::from_str(POD).unwrap();
         assert_eq!(
             FilterList(vec![FilterType::NamespaceInclude(vec![
-                Namespace::<Include>::try_from("test".to_string()).unwrap(),
-                Namespace::<Include>::try_from("other".to_string()).unwrap(),
-                Namespace::<Include>::try_from("test".to_string()).unwrap(),
+                Namespace::<Include>::try_from("test").unwrap(),
+                Namespace::<Include>::try_from("other").unwrap(),
+                Namespace::<Include>::try_from("test").unwrap(),
             ]),])
             .filter_object(
                 &obj,
@@ -236,12 +244,8 @@ mod tests {
 
         assert_eq!(
             FilterList(vec![
-                FilterType::NamespaceInclude(vec![
-                    Namespace::<Include>::try_from("test".to_string()).unwrap()
-                ]),
-                FilterType::NamespaceExclude(vec![
-                    Namespace::<Exclude>::try_from("test".to_string()).unwrap()
-                ]),
+                FilterType::NamespaceInclude(vec![Namespace::<Include>::try_from("test").unwrap()]),
+                FilterType::NamespaceExclude(vec![Namespace::<Exclude>::try_from("test").unwrap()]),
             ])
             .filter_object(
                 &obj,
@@ -253,11 +257,9 @@ mod tests {
         assert_eq!(
             FilterList(vec![
                 FilterType::NamespaceExclude(vec![
-                    Namespace::<Exclude>::try_from("other".to_string()).unwrap()
+                    Namespace::<Exclude>::try_from("other").unwrap()
                 ]),
-                FilterType::NamespaceExclude(vec![
-                    Namespace::<Exclude>::try_from("test".to_string()).unwrap()
-                ]),
+                FilterType::NamespaceExclude(vec![Namespace::<Exclude>::try_from("test").unwrap()]),
             ])
             .filter_object(
                 &obj,
@@ -299,11 +301,8 @@ mod tests {
         );
 
         let filter = FilterList(vec![FilterType::LabelSelectorExclude(vec![
-            Selector::<Exclude, Labels>::try_from(
-                "app.kubernetes.io/name=crust-gather".to_string(),
-            )
-            .unwrap(),
-            Selector::<Exclude, Labels>::try_from("name=crust-gather".to_string()).unwrap(),
+            Selector::<Exclude, Labels>::try_from("app.kubernetes.io/name=crust-gather").unwrap(),
+            Selector::<Exclude, Labels>::try_from("name=crust-gather").unwrap(),
         ])]);
 
         let gvk = GroupVersionKind::try_from(pod_tm.clone()).expect("parse GVK");
@@ -313,7 +312,7 @@ mod tests {
 
     #[test]
     fn test_matches() {
-        let list = FilterRegex::try_from("foo|bar".to_string()).unwrap();
+        let list = FilterRegex::try_from("foo|bar").unwrap();
         assert!(list.matches("foo"));
         assert!(list.matches("bar"));
         assert!(!list.matches("baz"));
