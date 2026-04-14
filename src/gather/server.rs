@@ -350,17 +350,64 @@ impl Api {
         .run();
 
         let handle = server.handle();
+        let mut server_task = tokio::spawn(server);
+        let mut shutdown_task = tokio::spawn(wait_for_shutdown_signal(shutdown));
 
-        tokio::spawn(async move {
-            let _ = shutdown.await;
-            handle.stop(true).await;
-        });
+        let server_result = tokio::select! {
+            result = &mut server_task => {
+                shutdown_task.abort();
+                flatten_server_task_result(result)?
+            }
+            result = &mut shutdown_task => {
+                flatten_shutdown_task_result(result)??;
+                handle.stop(true).await;
+                flatten_server_task_result(server_task.await)?
+            }
+        };
 
-        server.await?;
+        server_result?;
 
         Self::clean_kubeconfig(state)?;
 
         Ok(())
+    }
+}
+
+async fn wait_for_shutdown_signal(shutdown: oneshot::Receiver<()>) -> anyhow::Result<()> {
+    #[cfg(unix)]
+    {
+        let mut terminate =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+
+        tokio::select! {
+            _ = shutdown => Ok(()),
+            result = tokio::signal::ctrl_c() => result.map_err(Into::into),
+            _ = terminate.recv() => Ok(()),
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        tokio::select! {
+            _ = shutdown => Ok(()),
+            result = tokio::signal::ctrl_c() => result.map_err(Into::into),
+        }
+    }
+}
+
+fn flatten_server_task_result(
+    result: Result<std::io::Result<()>, tokio::task::JoinError>,
+) -> anyhow::Result<std::io::Result<()>> {
+    result.map_err(Into::into)
+}
+
+fn flatten_shutdown_task_result(
+    result: Result<anyhow::Result<()>, tokio::task::JoinError>,
+) -> anyhow::Result<anyhow::Result<()>> {
+    match result {
+        Ok(result) => Ok(result),
+        Err(error) if error.is_cancelled() => Ok(Ok(())),
+        Err(error) => Err(error.into()),
     }
 }
 
@@ -748,4 +795,109 @@ async fn watch_events_cached(
     selector: Selector,
 ) -> anyhow::Result<Vec<serde_json::Value>> {
     reader.watch_events(list, selector).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{collections::HashMap, fs::File};
+
+    use tempfile::{NamedTempFile, TempDir};
+
+    use crate::gather::writer::Archive;
+
+    fn kubeconfig_with_contexts(current_context: &str, extra_context: &str) -> Kubeconfig {
+        Kubeconfig {
+            current_context: Some(current_context.to_string()),
+            auth_infos: vec![
+                NamedAuthInfo {
+                    name: current_context.to_string(),
+                    ..Default::default()
+                },
+                NamedAuthInfo {
+                    name: extra_context.to_string(),
+                    ..Default::default()
+                },
+            ],
+            contexts: vec![
+                NamedContext {
+                    name: current_context.to_string(),
+                    context: Some(Context {
+                        cluster: current_context.to_string(),
+                        user: Some(current_context.to_string()),
+                        ..Default::default()
+                    }),
+                },
+                NamedContext {
+                    name: extra_context.to_string(),
+                    context: Some(Context {
+                        cluster: extra_context.to_string(),
+                        user: Some(extra_context.to_string()),
+                        ..Default::default()
+                    }),
+                },
+            ],
+            clusters: vec![
+                NamedCluster {
+                    name: current_context.to_string(),
+                    cluster: Some(Cluster {
+                        server: Some("http://127.0.0.1:6443".to_string()),
+                        ..Default::default()
+                    }),
+                },
+                NamedCluster {
+                    name: extra_context.to_string(),
+                    cluster: Some(Cluster {
+                        server: Some("http://127.0.0.1:9095/archive".to_string()),
+                        ..Default::default()
+                    }),
+                },
+            ],
+            ..Default::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn clean_kubeconfig_removes_served_context_and_restores_previous_context() {
+        let kubeconfig = NamedTempFile::new().unwrap();
+        let original = kubeconfig_with_contexts("prod", "archive");
+        serde_yaml::to_writer(File::create(kubeconfig.path()).unwrap(), &original).unwrap();
+        let archive_dir = TempDir::new().unwrap();
+        let archive_reader = ArchiveReader::new(
+            Archive::new(archive_dir.path().join("archive")),
+            &Storage::FS,
+        )
+        .await;
+
+        let state = ApiState {
+            archives: HashMap::from([("archive".to_string(), archive_reader)]),
+            kubeconfig_path: kubeconfig.path().to_path_buf(),
+            previous_context: Some("prod".to_string()),
+            serve_time: Utc::now(),
+            storage: Storage::FS,
+        };
+
+        Api::clean_kubeconfig(state).unwrap();
+
+        let cleaned = Kubeconfig::read_from(kubeconfig.path()).unwrap();
+        assert_eq!(cleaned.current_context.as_deref(), Some("prod"));
+        assert!(
+            cleaned
+                .contexts
+                .iter()
+                .all(|context| context.name != "archive")
+        );
+        assert!(
+            cleaned
+                .clusters
+                .iter()
+                .all(|cluster| cluster.name != "archive")
+        );
+        assert!(
+            cleaned
+                .auth_infos
+                .iter()
+                .all(|auth_info| auth_info.name != "archive")
+        );
+    }
 }
