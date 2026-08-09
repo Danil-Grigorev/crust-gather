@@ -232,7 +232,6 @@ mod test {
             skip_logs_collection: false,
             collectable: Objects::new_typed(Config {
                 skip_logs_collection: false,
-                skip_events_collection: false,
                 client: test_env.client().expect("client"),
                 filter: Arc::new(FilterGroup(vec![FilterList(vec![vec![filter].into()])])),
                 writer: Writer::new(
@@ -241,6 +240,7 @@ mod test {
                     None,
                     None,
                     DEFAULT_OCI_BUFFER_SIZE,
+                    true,
                 )
                 .await
                 .expect("failed to create builder")
