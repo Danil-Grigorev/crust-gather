@@ -240,7 +240,6 @@ mod test {
                     None,
                     None,
                     DEFAULT_OCI_BUFFER_SIZE,
-                    true,
                 )
                 .await
                 .expect("failed to create builder")

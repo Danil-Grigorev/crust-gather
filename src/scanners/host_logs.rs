@@ -223,7 +223,7 @@ impl HostLogs {
 
         Ok(Representation::new()
             .with_path(ArchivePath::to_path(pod, TypeMeta::resource::<Pod>()))
-            .with_data(&serde_saphyr::to_string(&data)?))
+            .with_data(&serde_json::to_string(&data)?))
     }
 
     async fn read_stream<R>(reader: Option<R>) -> anyhow::Result<String>
@@ -420,7 +420,7 @@ impl HostLogs {
 
         Ok(Representation::new()
             .with_path(path)
-            .with_data(&serde_saphyr::to_string(&result)?))
+            .with_data(&serde_json::to_string(&result)?))
     }
 }
 
@@ -442,12 +442,12 @@ mod test {
 
         let representation =
             HostLogs::pod_representation(&pod, vec!["kubelet-log-path".to_string()]).unwrap();
-        let dynamic_pod: DynamicObject = serde_saphyr::from_str(representation.data()).unwrap();
-        let archived_pod: Pod = serde_saphyr::from_str(representation.data()).unwrap();
+        let dynamic_pod: DynamicObject = serde_json::from_str(representation.data()).unwrap();
+        let archived_pod: Pod = serde_json::from_str(representation.data()).unwrap();
 
         assert_eq!(
             representation.path(),
-            ArchivePath::Namespaced("namespaces/default/v1/pod/worker-1.yaml".into())
+            ArchivePath::Namespaced("namespaces/default/v1/pod/worker-1.json".into())
         );
         assert!(pod.metadata.creation_timestamp.is_some());
         assert_eq!(dynamic_pod.types.unwrap(), TypeMeta::resource::<Pod>());

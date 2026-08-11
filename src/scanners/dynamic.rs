@@ -59,7 +59,7 @@ impl Collect<DynamicObject> for Dynamic {
         Ok(vec![
             Representation::new()
                 .with_path(self.path(object))
-                .with_data(&serde_saphyr::to_string(&DynamicObject {
+                .with_data(&serde_json::to_string(&DynamicObject {
                     types: Some(self.resource().to_type_meta()),
                     ..object.clone()
                 })?),
@@ -189,6 +189,6 @@ mod test {
         let repr = dynamic.representations(&objects[0]).await.expect("Succeed");
 
         assert!(!repr[0].data().is_empty());
-        serde_saphyr::from_str::<NoDuplicate>(repr[0].data()).expect("Success");
+        serde_json::from_str::<NoDuplicate>(repr[0].data()).expect("Success");
     }
 }

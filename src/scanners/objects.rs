@@ -195,7 +195,6 @@ mod test {
                 debug_pod: DebugPod::default(),
                 disable_additional_logs: false,
                 skip_logs_collection: false,
-                skip_events_collection: false,
             },
             ApiResource::erase::<Pod>(&()),
         )
@@ -205,7 +204,7 @@ mod test {
 
         let repr = &repr[0];
 
-        let existing_pod: Pod = serde_saphyr::from_str(repr.data()).unwrap();
+        let existing_pod: Pod = serde_json::from_str(repr.data()).unwrap();
         assert_eq!(existing_pod.spec.unwrap().containers[0].name, "test");
     }
 
@@ -241,12 +240,11 @@ mod test {
                 debug_pod: DebugPod::default(),
                 disable_additional_logs: false,
                 skip_logs_collection: false,
-                skip_events_collection: false,
             },
             ApiResource::erase::<v1::Namespace>(&()),
         );
 
-        let expected = ArchivePath::Cluster("cluster/v1/namespace/test.yaml".into());
+        let expected = ArchivePath::Cluster("cluster/v1/namespace/test.json".into());
         let actual = collectable.path(&obj);
 
         assert_eq!(expected, actual);
@@ -284,12 +282,11 @@ mod test {
                 debug_pod: DebugPod::default(),
                 disable_additional_logs: false,
                 skip_logs_collection: false,
-                skip_events_collection: false,
             },
             ApiResource::erase::<Pod>(&()),
         );
 
-        let expected = ArchivePath::Namespaced("namespaces/default/v1/pod/test.yaml".into());
+        let expected = ArchivePath::Namespaced("namespaces/default/v1/pod/test.json".into());
         let actual = collectable.path(&obj);
 
         assert_eq!(expected, actual);

@@ -151,15 +151,15 @@ impl ArchivePath {
 
         match (namespace_name.name(), namespace_name.namespace()) {
             (Some(name), Some(namespace)) => Self::Namespaced(
-                format!("namespaces/{namespace}/{api_version}/{kind}/{name}.yaml").into(),
+                format!("namespaces/{namespace}/{api_version}/{kind}/{name}.json").into(),
             ),
             (Some(name), None) => {
-                Self::Cluster(format!("cluster/{api_version}/{kind}/{name}.yaml").into())
+                Self::Cluster(format!("cluster/{api_version}/{kind}/{name}.json").into())
             }
             (None, Some(namespace)) => Self::NamespacedList(
-                format!("namespaces/{namespace}/{api_version}/{kind}/*.yaml").into(),
+                format!("namespaces/{namespace}/{api_version}/{kind}/*.json").into(),
             ),
-            (None, None) => Self::ClusterList(format!("**/{api_version}/{kind}/*.yaml").into()),
+            (None, None) => Self::ClusterList(format!("**/{api_version}/{kind}/*.json").into()),
         }
     }
 
@@ -385,7 +385,7 @@ mod tests {
         let resource = Pod::default();
         let result = ArchivePath::new_path(resource.meta(), TypeMeta::resource::<Pod>());
 
-        assert_eq!(result, ArchivePath::ClusterList("**/v1/pod/*.yaml".into()));
+        assert_eq!(result, ArchivePath::ClusterList("**/v1/pod/*.json".into()));
     }
 
     #[test]

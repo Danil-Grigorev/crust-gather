@@ -95,8 +95,8 @@ pub trait Collect<R: ResourceThreadSafe>: Send {
     /// Constructs the path for storing the collected Kubernetes object.
     ///
     /// The path is constructed differently for cluster-scoped vs namespaced objects.
-    /// Cluster-scoped objects are stored under `cluster/{api_version}/{kind}/{name}.yaml`.
-    /// Namespaced objects are stored under `namespaces/{namespace}/{api_version}/{kind}/{name}.yaml`.
+    /// Cluster-scoped objects are stored under `cluster/{api_version}/{kind}/{name}.json`.
+    /// Namespaced objects are stored under `namespaces/{namespace}/{api_version}/{kind}/{name}.json`.
     ///
     /// Example output: `crust-gather/namespaces/default/pod/nginx-deployment-549849849849849849849
     fn path(&self, obj: &R) -> ArchivePath {
@@ -124,7 +124,7 @@ pub trait Collect<R: ResourceThreadSafe>: Send {
         Ok(vec![
             Representation::new()
                 .with_path(self.path(&object))
-                .with_data(serde_saphyr::to_string(&serde_json::to_value(object)?)?.as_str()),
+                .with_data(serde_json::to_string(&serde_json::to_value(object)?)?.as_str()),
         ])
     }
 

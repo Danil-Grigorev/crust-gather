@@ -37,7 +37,7 @@ use crate::{
         reader::{ArchiveReader, Destination, Get, List, Log, NamedObject, Reader, Watch},
         representation::TypeMetaGetter,
         storage::{Descriptor, OCIState, Storage, pull_blob_cached},
-        writer::{Archive, YamlPath},
+        writer::{Archive, JsonPath},
     },
 };
 
@@ -312,24 +312,24 @@ impl Api {
         };
 
         let data = pull_blob_cached(client, reference, auth, index_layer, true).await?;
-        let resource_paths: Vec<YamlPath> = serde_saphyr::from_slice(&data)?;
-        for yaml_path in resource_paths {
-            let resource_path = yaml_path.path;
+        let resource_paths: Vec<JsonPath> = serde_json::from_slice(&data)?;
+        for json_path in resource_paths {
+            let resource_path = json_path.path;
             let Some(parent_path) = resource_path.parent() else {
                 anyhow::bail!(format!(
                     "index layer must reference a parent list object: {resource_path:?}"
                 ))
             };
 
-            let Some(parent) = index.get(&parent_path.with_extension("yaml")) else {
+            let Some(parent) = index.get(&parent_path.with_extension("json")) else {
                 anyhow::bail!(format!(
-                    "index layer must reference a yaml list object: {resource_path:?}"
+                    "index layer must reference a json list object: {resource_path:?}"
                 ))
             };
 
             index.insert(
                 resource_path,
-                Descriptor::ListOciDescriptor(parent.deref().clone(), yaml_path.from, yaml_path.to),
+                Descriptor::ListOciDescriptor(parent.deref().clone(), json_path.from, json_path.to),
             );
         }
 
